@@ -63,7 +63,7 @@ main :: proc() {
 	}
 	defer clay_ui.destroy_clay_renderer(&clay_renderer)
 
-	running := false
+	running := true
 	for running {
 		defer free_all(context.temp_allocator)
 		e: sdl.Event
