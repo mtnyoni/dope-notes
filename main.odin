@@ -37,6 +37,21 @@ main :: proc() {
 	assert(window != nil)
 	defer sdl.DestroyWindow(window)
 
+	text_cursor := sdl.CreateSystemCursor(.TEXT)
+	default_cursor := sdl.GetDefaultCursor()
+	using_text_cursor := false
+
+	defer {
+		if text_cursor != nil {
+			if default_cursor != nil {
+				if !sdl.SetCursor(default_cursor) {
+					fmt.eprintln("Could not restore default cursor:", sdl.GetError())
+				}
+			}
+			sdl.DestroyCursor(text_cursor)
+		}
+	}
+
 	width, height: i32
 	assert(sdl.GetWindowSize(window, &width, &height))
 	minMemorySize: c.size_t = cast(c.size_t)clay.MinMemorySize()
@@ -133,6 +148,17 @@ main :: proc() {
 		mouse_buttons := sdl.GetMouseState(&mouse_x, &mouse_y)
 		clay.SetLayoutDimensions({f32(width), f32(height)})
 		clay.SetPointerState({mouse_x, mouse_y}, .LEFT in mouse_buttons)
+		if text_cursor != nil && default_cursor != nil {
+			over_editor := sdl.GetMouseFocus() == window && clay.PointerOver(clay.ID(ui.EDITOR_ID))
+			if over_editor != using_text_cursor {
+				cursor := over_editor ? text_cursor : default_cursor
+				if sdl.SetCursor(cursor) {
+					using_text_cursor = over_editor
+				} else {
+					fmt.eprintln("Could not change mouse cursor:", sdl.GetError())
+				}
+			}
+		}
 
 		clay.BeginLayout()
 		ui.UILayout(&editor_state)
