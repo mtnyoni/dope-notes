@@ -1,5 +1,6 @@
 package ui
 
+import theme "../theme"
 import clay "shared:clay"
 
 Annotations :: proc() {
@@ -9,7 +10,7 @@ Annotations :: proc() {
 			sizing = {width = clay.SizingFixed(250), height = clay.SizingGrow()},
 			layoutDirection = .LeftToRight,
 		},
-		backgroundColor = {233, 22, 23, 255},
+		border = {color = theme.Light.border, width = {1, 0, 0, 0, 0}},
 	},
 	) {}
 }

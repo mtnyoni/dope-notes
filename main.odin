@@ -6,6 +6,7 @@ import "core:fmt"
 import "core:mem"
 import font "font"
 import clay "shared:clay"
+import theme "theme"
 import ui "ui"
 import clay_ui "ui/clay"
 import sdl "vendor:sdl3"
@@ -14,8 +15,7 @@ DEFAULT_WIN_W :: 1080
 DEFAULT_WIN_H :: 640
 
 main :: proc() {
-	buf := buffer.make_gap_buffer(2)
-	defer buffer.destroy_gap_buffer(&buf)
+
 
 	track: mem.Tracking_Allocator
 	mem.tracking_allocator_init(&track, context.allocator)
@@ -64,6 +64,21 @@ main :: proc() {
 	}
 	defer clay_ui.destroy_clay_renderer(&clay_renderer)
 
+	buf := buffer.make_gap_buffer(64)
+	defer buffer.destroy_gap_buffer(&buf)
+
+	buffer.insert(&buf, 0, '0')
+	buffer.insert(&buf, 1, rune('1'))
+	buffer.insert(&buf, 2, "2345678")
+	buffer.insert(&buf, 0, "hello ")
+	buffer.shift_gap_to(&buf, 5)
+
+	editor_state := ui.EditorState {
+		buf     = buf,
+		cursor  = 5,
+		focused = true,
+	}
+
 	running := true
 	for running {
 		defer free_all(context.temp_allocator)
@@ -71,6 +86,7 @@ main :: proc() {
 		// input: ui.Input
 
 		for sdl.PollEvent(&e) {
+			ui.editor_handle_event(&editor_state, &e)
 			#partial switch e.type {
 			case .QUIT:
 				running = false
@@ -78,6 +94,7 @@ main :: proc() {
 				if e.button.button == sdl.BUTTON_LEFT {
 					// input.left_pressed = true
 				}
+
 			case .MOUSE_BUTTON_UP:
 				if e.button.button == sdl.BUTTON_LEFT {
 					// input.left_released = true
@@ -91,7 +108,15 @@ main :: proc() {
 		assert(sdl.GetRenderOutputSize(renderer, &output_width, &output_height))
 		scale_x := f32(output_width) / f32(width)
 		scale_y := f32(output_height) / f32(height)
-		assert(sdl.SetRenderDrawColor(renderer, 255, 255, 255, 255))
+		assert(
+			sdl.SetRenderDrawColor(
+				renderer,
+				u8(theme.Light.background.r),
+				u8(theme.Light.background.g),
+				u8(theme.Light.background.b),
+				u8(theme.Light.background.a),
+			),
+		)
 		assert(sdl.RenderClear(renderer))
 
 		mouse_x, mouse_y: f32
@@ -101,14 +126,8 @@ main :: proc() {
 		clay.SetLayoutDimensions({f32(width), f32(height)})
 
 		clay.BeginLayout()
-		// login_clicked := ui.Login_Form(eye_icon, input, &login_state)
-		ui.UILayout()
+		ui.UILayout(&editor_state)
 		commands := clay.EndLayout(1.0 / 60.0)
-
-		// if login_clicked {
-		// 	handle_back()
-		// }
-
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)
 
 		assert(sdl.RenderPresent(renderer))
