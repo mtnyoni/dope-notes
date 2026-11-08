@@ -131,9 +131,8 @@ main :: proc() {
 
 		mouse_x, mouse_y: f32
 		mouse_buttons := sdl.GetMouseState(&mouse_x, &mouse_y)
-		// input.left_down = .LEFT in mouse_buttons
-		// clay.SetPointerState({mouse_x, mouse_y}, input.left_down)
 		clay.SetLayoutDimensions({f32(width), f32(height)})
+		clay.SetPointerState({mouse_x, mouse_y}, .LEFT in mouse_buttons)
 
 		clay.BeginLayout()
 		ui.UILayout(&editor_state)

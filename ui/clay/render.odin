@@ -73,9 +73,47 @@ render_clay :: proc(
 	commands: ^clay.ClayArray(clay.RenderCommand),
 	scale_x, scale_y: f32,
 ) {
+	// Clip rectangles are relative to the current SDL viewport, in pixels.
+	viewport: sdl.Rect
+	assert(sdl.GetRenderViewport(renderer, &viewport))
+	original_clip: sdl.Rect
+	had_clip := sdl.RenderClipEnabled(renderer)
+	if had_clip do assert(sdl.GetRenderClipRect(renderer, &original_clip))
+	base_clip := sdl.Rect{0, 0, viewport.w, viewport.h}
+	if had_clip do base_clip = original_clip
+	clips := make([dynamic]sdl.Rect, context.temp_allocator)
+	defer {
+		if had_clip {
+			assert(sdl.SetRenderClipRect(renderer, &original_clip))
+		} else {
+			assert(sdl.SetRenderClipRect(renderer, nil))
+		}
+	}
 	for i in 0 ..< commands.length {
 		command := clay.RenderCommandArray_Get(commands, i)
 		rect := pixel_rect(command.boundingBox, scale_x, scale_y)
+		// ScissorEnd has no drawable bounds, so process clips before rejecting
+		// empty geometry. Nested clips intersect instead of replacing a parent.
+		if command.commandType == .ScissorStart {
+			parent := base_clip
+			if len(clips) > 0 do parent = clips[len(clips) - 1]
+			clip := intersect_clip(parent, rect, command.renderData.clip)
+			append(&clips, clip)
+			assert(sdl.SetRenderClipRect(renderer, &clip))
+			continue
+		}
+		if command.commandType == .ScissorEnd {
+			assert(len(clips) > 0)
+			pop(&clips)
+			if len(clips) > 0 {
+				assert(sdl.SetRenderClipRect(renderer, &clips[len(clips) - 1]))
+			} else if had_clip {
+				assert(sdl.SetRenderClipRect(renderer, &original_clip))
+			} else {
+				assert(sdl.SetRenderClipRect(renderer, nil))
+			}
+			continue
+		}
 		if rect.w <= 0 || rect.h <= 0 do continue
 
 		#partial switch command.commandType {
@@ -120,6 +158,23 @@ render_clay :: proc(
 			if texture != nil do assert(sdl.RenderTexture(renderer, texture, nil, &rect))
 		}
 	}
+}
+
+intersect_clip :: proc(parent: sdl.Rect, bounds: sdl.FRect, axes: clay.ClipRenderData) -> sdl.Rect {
+	result := parent
+	if axes.horizontal {
+		left := max(parent.x, i32(math.ceil(bounds.x)))
+		right := min(parent.x + parent.w, i32(math.floor(bounds.x + bounds.w)))
+		result.x = left
+		result.w = max(0, right - left)
+	}
+	if axes.vertical {
+		top := max(parent.y, i32(math.ceil(bounds.y)))
+		bottom := min(parent.y + parent.h, i32(math.floor(bounds.y + bounds.h)))
+		result.y = top
+		result.h = max(0, bottom - top)
+	}
+	return result
 }
 
 draw_tinted :: proc(
