@@ -110,13 +110,18 @@ prepare_live_markdown_layout :: proc(root: ^commonmark.Node, options: RenderOpti
 raw_source_block :: proc(source: string, row: SourceLine, line_number: int, options: RenderOptions) -> RenderBlock {
 	block := RenderBlock{font_size = 15, line_height = 24, active = true, source_line = line_number, source_end_line = line_number, lines = make([dynamic]RenderLine, context.temp_allocator)}
 	start, at := row.start, row.start
+	last_space := -1
 	for at < row.end {
 		next := at + 1
 		for next < row.end && (source[next] & 0xC0) == 0x80 do next += 1
+		if source[at] == ' ' || source[at] == '\t' do last_space = at
 		span := TextSpan{text = source[start:next], color = theme.Light.text}
 		if at > start && span_width(span, 15, options) > options.width {
-			append_raw_line(&block, source, start, at, row.start, line_number)
-			start = at
+			break_at := at
+			if last_space > start do break_at = last_space + 1
+			append_raw_line(&block, source, start, break_at, row.start, line_number)
+			start = break_at
+			last_space = -1
 		}
 		at = next
 	}

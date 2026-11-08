@@ -278,6 +278,7 @@ wrap_inline :: proc(spans: []TextSpan, width: f32, size: u16, options: RenderOpt
 						append(&lines[len(lines) - 1].spans, part)
 						append(&lines, RenderLine{spans = make([dynamic]TextSpan, context.temp_allocator)})
 						start = cursor
+						x = 0
 					}
 					cursor = next
 				}

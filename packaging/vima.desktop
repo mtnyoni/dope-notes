@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Dope Notes
+Comment=Write and organize Markdown notes
+Exec=dope-notes
+Icon=accessories-text-editor
+Terminal=false
+Categories=Utility;
+Keywords=notes;markdown;editor;
+StartupNotify=false

@@ -64,6 +64,20 @@ active_source_wraps_without_splitting_utf8 :: proc(t: ^testing.T) {
 }
 
 @(test)
+active_source_wraps_at_words_without_adding_source_lines :: proc(t: ^testing.T) {
+	text := "hello world again"
+	root := commonmark.parse_document_from_string(text, {})
+	defer commonmark.node_free(root)
+	layout := prepare_live_markdown_layout(root, {width = 70, measure = render_test_measure}, text, 0)
+	testing.expect_value(t, len(layout.blocks), 1)
+	for line in layout.blocks[0].lines {
+		if line.source_end < len(text) {
+			testing.expect(t, line.source_end == 6 || line.source_end == 12)
+		}
+	}
+}
+
+@(test)
 list_code_fences_and_setext_spacing_keep_their_context :: proc(t: ^testing.T) {
 	text := "- ```odin\n  first()\n  second()\n  ```\n"
 	root := commonmark.parse_document_from_string(text, {})

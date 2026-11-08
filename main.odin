@@ -122,7 +122,21 @@ main :: proc() {
 	}
 	defer clay_ui.destroy_clay_renderer(&clay_renderer)
 
-	notebooks, notebook_err := markdown.get_notes()
+	data_home := os.get_env("XDG_DATA_HOME", context.temp_allocator)
+	if data_home == "" {
+		home := os.get_env("HOME", context.temp_allocator)
+		if home == "" {
+			fmt.eprintln("HOME is unset; cannot find notes storage")
+			return
+		}
+		data_home = fmt.tprintf("%s/.local/share", home)
+	}
+	notes_dir := fmt.tprintf("%s/dope-notes/notebooks", data_home)
+	if err := os.make_directory_all(fmt.tprintf("%s/business planning", notes_dir)); err != nil {
+		fmt.eprintln("Could not create notes directory:", err)
+		return
+	}
+	notebooks, notebook_err := markdown.get_notes(notes_dir)
 	if notebook_err != nil {
 		fmt.eprintln("Could not load notebooks:", notebook_err)
 		return
