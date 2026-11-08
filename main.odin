@@ -15,6 +15,7 @@ import theme "theme"
 import ui "ui"
 import clay_ui "ui/clay"
 import sdl "vendor:sdl3"
+import img "vendor:sdl3/image"
 
 DEFAULT_WIN_W :: 1320
 DEFAULT_WIN_H :: 640
@@ -60,6 +61,7 @@ main :: proc() {
 	context.allocator = mem.tracking_allocator(&track)
 	defer mem.tracking_allocator_destroy(&track)
 
+	_ = sdl.SetAppMetadata("Dope Notes", "0.0.0", "com.mtnyoni.dope-notes")
 	if !sdl.Init(sdl.INIT_VIDEO) {
 		fmt.eprintln("SDL init failed:", sdl.GetError())
 		return
@@ -74,6 +76,12 @@ main :: proc() {
 	)
 	assert(window != nil)
 	defer sdl.DestroyWindow(window)
+	icon := img.Load("/usr/share/icons/hicolor/512x512/apps/dope-notes.png")
+	if icon == nil do icon = img.Load("packaging/icons/dope-notes.png")
+	if icon != nil {
+		_ = sdl.SetWindowIcon(window, icon)
+		sdl.DestroySurface(icon)
+	}
 
 	text_cursor := sdl.CreateSystemCursor(.TEXT)
 	default_cursor := sdl.GetDefaultCursor()
@@ -132,16 +140,24 @@ main :: proc() {
 		data_home = fmt.tprintf("%s/.local/share", home)
 	}
 	notes_dir := fmt.tprintf("%s/dope-notes/notebooks", data_home)
-	if err := os.make_directory_all(fmt.tprintf("%s/business planning", notes_dir)); err != nil {
-		fmt.eprintln("Could not create notes directory:", err)
-		return
+	first_run := !os.exists(notes_dir)
+	default_notebook := fmt.tprintf("%s/Default", notes_dir)
+	if first_run {
+		if err := os.make_directory_all(default_notebook); err != nil {
+			fmt.eprintln("Could not create notes directory:", err)
+			return
+		}
+		if err := os.write_entire_file(fmt.tprintf("%s/Welcome.md", default_notebook), "Hello there!\n"); err != nil {
+			fmt.eprintln("Could not create welcome note:", err)
+			return
+		}
 	}
 	notebooks, notebook_err := markdown.get_notes(notes_dir)
 	if notebook_err != nil {
 		fmt.eprintln("Could not load notebooks:", notebook_err)
 		return
 	}
-	app_state := state.make_app_state(notebooks)
+	app_state := state.make_app_state(notebooks, "Default")
 	defer markdown.free_notebooks(app_state.notebooks)
 
 	documents: ui.EditorDocuments

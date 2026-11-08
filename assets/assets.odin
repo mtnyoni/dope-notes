@@ -41,9 +41,12 @@ ICON_PATHS :: [Icon]cstring {
 
 Manager :: struct {
 	textures: [Icon]^sdl.Texture,
+	app_icon: ^sdl.Texture,
 }
 
 load :: proc(renderer: ^sdl.Renderer) -> (manager: Manager, ok: bool) {
+	manager.app_icon = img.LoadTexture(renderer, "/usr/share/icons/hicolor/512x512/apps/dope-notes.png")
+	if manager.app_icon == nil do manager.app_icon = img.LoadTexture(renderer, "packaging/icons/dope-notes.png")
 	for path, icon in ICON_PATHS {
 		texture := img.LoadTexture(renderer, path)
 		if texture == nil {
@@ -67,6 +70,7 @@ get :: proc(manager: ^Manager, icon: Icon) -> ^sdl.Texture {
 }
 
 destroy :: proc(manager: ^Manager) {
+	if manager.app_icon != nil do sdl.DestroyTexture(manager.app_icon)
 	for texture in manager.textures {
 		if texture != nil do sdl.DestroyTexture(texture)
 	}

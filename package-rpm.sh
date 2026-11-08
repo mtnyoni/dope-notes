@@ -18,19 +18,21 @@ if [[ "${1:-}" == "--source-only" ]]; then
 fi
 
 if (( $# != 1 )); then
-	echo "usage: $0 [--source-only] VERSION-RELEASE" >&2
-	echo "example: $0 --source-only 0.1.2-1" >&2
+	echo "usage: $0 [--source-only] [v]MAJOR.MINOR.PATCH[rcN][-RELEASE]" >&2
 	exit 2
 fi
 
-package_version="$1"
+package_version="${1#v}"
 
-if [[ ! "$package_version" =~ ^([0-9]+([.][0-9]+)*)-([0-9]+)$ ]]; then
-	echo "error: version must use version-release format, for example 0.1.0-1" >&2
+if [[ ! "$package_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(rc([1-9][0-9]*)?)?(-([1-9][0-9]*))?$ ]]; then
+	echo "error: invalid version; examples: v0.0.1rc, v0.0.1-1, 0.0.1" >&2
 	exit 2
 fi
-version="${BASH_REMATCH[1]}"
-release="${BASH_REMATCH[3]}"
+version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+release="${BASH_REMATCH[7]:-1}"
+if [[ -n "${BASH_REMATCH[4]}" ]]; then
+	release="0.rc${BASH_REMATCH[5]:-1}.$release"
+fi
 
 if [[ "$(uname -m)" != "x86_64" ]]; then
 	echo "error: the packaged Odin toolchain currently supports x86_64 only" >&2
@@ -40,6 +42,9 @@ fi
 for command_name in curl git rpmbuild sha256sum tar; do
 	if ! command -v "$command_name" >/dev/null 2>&1; then
 		echo "error: $command_name is required" >&2
+		if [[ "$command_name" == "rpmbuild" ]] && command -v dnf >/dev/null 2>&1; then
+			echo "install it with: sudo dnf install rpm-build" >&2
+		fi
 		exit 1
 	fi
 done
@@ -61,7 +66,17 @@ fi
 
 source_archive="$source_dir/dope-notes-$version.tar.gz"
 source_date_epoch="$(git -C "$project_dir" log -1 --format=%ct 2>/dev/null || date +%s)"
-git -C "$project_dir" ls-files -z | tar \
+{
+	git -C "$project_dir" ls-files -z --cached --others --exclude-standard |
+		while IFS= read -r -d '' path; do
+			[[ "$path" == build/* || "$path" == odin_shared/* || "$path" == shared/clay ]] && continue
+			[[ -e "$project_dir/$path" ]] && printf '%s\0' "$path"
+		done
+	git -C "$project_dir/shared/clay" ls-files -z |
+		while IFS= read -r -d '' path; do
+			printf 'shared/clay/%s\0' "$path"
+		done
+} | tar \
 	--directory="$project_dir" \
 	--null \
 	--files-from=- \
@@ -90,8 +105,8 @@ install -m0644 "$source_archive" "$rpm_topdir/SOURCES/"
 install -m0644 "$odin_path" "$rpm_topdir/SOURCES/"
 install -m0644 "$project_dir/packaging/dope-notes.spec" "$rpm_topdir/SPECS/dope-notes.spec"
 sed -i \
-	-e "s/^%{!?dope-notes_version:.*$/%global dope-notes_version $version/" \
-	-e "s/^%{!?dope-notes_release:.*$/%global dope-notes_release $release/" \
+	-e "s/^%{!?dope_notes_version:.*$/%global dope_notes_version $version/" \
+	-e "s/^%{!?dope_notes_release:.*$/%global dope_notes_release $release/" \
 	"$rpm_topdir/SPECS/dope-notes.spec"
 changelog_date="$(LC_ALL=C date --utc --date="@$source_date_epoch" '+%a %b %d %Y')"
 printf '\n%%changelog\n* %s Tawanda M Nyoni <noreply@example.invalid> - %s-%s\n- Build release %s-%s\n' \
@@ -105,8 +120,8 @@ fi
 
 rpmbuild \
 	--define "_topdir $rpm_topdir" \
-	--define "dope-notes_version $version" \
-	--define "dope-notes_release $release" \
+	--define "dope_notes_version $version" \
+	--define "dope_notes_release $release" \
 	"$rpmbuild_mode" "$rpm_topdir/SPECS/dope-notes.spec"
 
 mapfile -t built_packages < <(

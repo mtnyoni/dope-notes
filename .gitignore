@@ -4,3 +4,4 @@ font/font.a
 font/font.o
 odin_shared/
 dope-notes
+build/

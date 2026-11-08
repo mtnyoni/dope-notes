@@ -16,19 +16,14 @@ if ! command -v pkg-config >/dev/null 2>&1; then
 	exit 1
 fi
 
-if ! pkg-config --exists sdl3 sdl3-ttf sdl3-image; then
-	echo "error: SDL3 development packages are missing" >&2
-	echo "install them with: sudo dnf install SDL3-devel SDL3_ttf-devel SDL3_image-devel" >&2
+if ! pkg-config --exists sdl3; then
+	echo "error: SDL3 development package is missing" >&2
+	echo "install them with: sudo dnf install SDL3-devel" >&2
 	exit 1
 fi
 
-"$project_dir/native/build.sh" >/dev/null
+bash "$project_dir/font/build.sh"
 
-if [[ ! -f /usr/share/fonts/google-noto/NotoSans-Regular.ttf ]]; then
-	echo "error: Noto Sans is missing" >&2
-	echo "install it with: sudo dnf install google-noto-sans-fonts" >&2
-	exit 1
-fi
 
 mkdir -p "$output_dir"
 
@@ -45,7 +40,11 @@ case "$mode" in
 		;;
 esac
 
+mkdir -p "$project_dir/odin_shared"
+ln -sfnT ../shared/clay/bindings/odin/clay-odin "$project_dir/odin_shared/clay"
+
 odin build "$project_dir" \
+	"-collection:shared=$project_dir/odin_shared" \
 	"-out:$output_dir/dope-notes" \
 	-no-rpath \
 	-reloc-mode:pic \
