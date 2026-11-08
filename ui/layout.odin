@@ -1,10 +1,11 @@
 package ui
 
+import assets "../assets"
 import state "../state"
 import theme "../theme"
 import clay "shared:clay"
 
-UILayout :: proc(app_state: ^state.AppState, ed: ^EditorState) {
+UILayout :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState, ed: ^EditorState) {
 	if clay.UI(clay.ID("Root"))(
 	{
 		layout = {
@@ -13,7 +14,7 @@ UILayout :: proc(app_state: ^state.AppState, ed: ^EditorState) {
 		},
 	},
 	) {
-		Sidebar(app_state)
+		Sidebar(ui_assets, app_state)
 		if clay.UI(clay.ID("Content"))(
 		{
 			layout = {

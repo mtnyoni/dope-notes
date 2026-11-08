@@ -1,6 +1,7 @@
 package main
 
 import state "./state"
+import assets "assets"
 import "core:c"
 import "core:fmt"
 import "core:mem"
@@ -73,6 +74,11 @@ main :: proc() {
 		return
 	}
 	defer sdl.DestroyRenderer(renderer)
+
+	ui_assets, assets_ok := assets.load(renderer)
+	if !assets_ok do return
+	defer assets.destroy(&ui_assets)
+
 	assert(sdl.SetRenderLogicalPresentation(renderer, 0, 0, .DISABLED))
 	clay_renderer := clay_ui.Clay_Renderer {
 		font = face,
@@ -180,7 +186,7 @@ main :: proc() {
 
 		clay.UpdateScrollContainers(false, scroll_delta, 1.0 / 60.0)
 		clay.BeginLayout()
-		ui.UILayout(&app_state, editor_state)
+		ui.UILayout(&ui_assets, &app_state, editor_state)
 		commands := clay.EndLayout(1.0 / 60.0)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)
 

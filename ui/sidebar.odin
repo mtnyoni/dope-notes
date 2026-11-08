@@ -1,5 +1,6 @@
 package ui
 
+import assets "../assets"
 import notes "../notes"
 import state "../state"
 import theme "../theme"
@@ -8,8 +9,11 @@ import clay "shared:clay"
 SIDEBAR_ITEM_TITLE_FONT_SIZE :: 13
 SIDEBAR_ITEM_DESCRIPTION_FONT_SIZE :: 12
 
-Sidebar :: proc(app_state: ^state.AppState) {
+Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 	clicked := clay.GetPointerState().state == .PressedThisFrame
+	chevron_up_down_icon := assets.get(ui_assets, .ChevronsUpDown)
+	search_icon := assets.get(ui_assets, .Search)
+	square_pen_icon := assets.get(ui_assets, .SquarePen)
 
 	if clay.UI(clay.ID("Sidebar"))(
 	{
@@ -27,43 +31,71 @@ Sidebar :: proc(app_state: ^state.AppState) {
 				sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 				layoutDirection = .TopToBottom,
 				padding = {8, 8, 8, 8},
+				childAlignment = clay.ChildAlignment{y = clay.LayoutAlignmentY.Center},
 			},
 			backgroundColor = theme.Light.surface,
-			cornerRadius = {16, 16, 16, 16},
+			cornerRadius = clay.CornerRadiusAll(16),
 		},
 		) {
 			if clay.UI()(
 			{
 				layout = {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(32)},
-					padding = {8, 8, 8, 8},
+					padding = clay.PaddingAll(8),
 				},
+				backgroundColor = clay.Hovered() ? theme.Gray_100 : theme.White,
+				cornerRadius = clay.CornerRadiusAll(8),
 			},
 			) {
 				clay.Text(
 					"Business Planning",
 					{
 						fontId = 0,
-						fontSize = EDITOR_FONT_SIZE,
+						fontSize = SIDEBAR_ITEM_TITLE_FONT_SIZE + 1,
 						textColor = theme.Light.text,
 						wrapMode = .None,
 					},
 				)
+				if clay.UI()({layout = {sizing = {width = clay.SizingGrow()}}}) {}
+				if chevron_up_down_icon != nil {
+					if clay.UI()(
+					{
+						layout = {
+							sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)},
+						},
+						image = {imageData = rawptr(chevron_up_down_icon)},
+					},
+					) {}
+				}
 			}
 
 			if clay.UI()(
 			{
 				layout = {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(32)},
-					padding = {8, 8, 8, 8},
+					padding = clay.PaddingAll(8),
+					layoutDirection = .LeftToRight,
+					childGap = 4,
 				},
+				backgroundColor = clay.Hovered() ? theme.Gray_100 : theme.White,
+				cornerRadius = clay.CornerRadiusAll(8),
 			},
 			) {
+				if square_pen_icon != nil {
+					if clay.UI()(
+					{
+						layout = {
+							sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)},
+						},
+						image = {imageData = rawptr(square_pen_icon)},
+					},
+					) {}
+				}
 				clay.Text(
 					"New Note",
 					{
 						fontId = 0,
-						fontSize = EDITOR_FONT_SIZE,
+						fontSize = SIDEBAR_ITEM_TITLE_FONT_SIZE,
 						textColor = theme.Light.text,
 						wrapMode = .None,
 					},
@@ -74,15 +106,29 @@ Sidebar :: proc(app_state: ^state.AppState) {
 			{
 				layout = {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(32)},
-					padding = {8, 8, 8, 8},
+					padding = clay.PaddingAll(8),
+					layoutDirection = .LeftToRight,
+					childGap = 4,
 				},
+				backgroundColor = clay.Hovered() ? theme.Gray_100 : theme.White,
+				cornerRadius = clay.CornerRadiusAll(8),
 			},
 			) {
+				if search_icon != nil {
+					if clay.UI()(
+					{
+						layout = {
+							sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)},
+						},
+						image = {imageData = rawptr(search_icon)},
+					},
+					) {}
+				}
 				clay.Text(
 					"Search",
 					{
 						fontId = 0,
-						fontSize = EDITOR_FONT_SIZE,
+						fontSize = SIDEBAR_ITEM_TITLE_FONT_SIZE,
 						textColor = theme.Light.text,
 						wrapMode = .None,
 					},
@@ -95,6 +141,7 @@ Sidebar :: proc(app_state: ^state.AppState) {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 					layoutDirection = .TopToBottom,
 					childGap = 2,
+					padding = clay.Padding{top = 8},
 				},
 			},
 			) {
@@ -104,11 +151,11 @@ Sidebar :: proc(app_state: ^state.AppState) {
 						layout = {
 							sizing = {width = clay.SizingGrow(), height = clay.SizingFit()},
 							layoutDirection = .TopToBottom,
-							padding = {12, 12, 12, 12},
+							padding = clay.PaddingAll(12),
 							childGap = 4,
 						},
 						backgroundColor = app_state.current_doc == article.slug ? theme.Cyan_200 : (clay.Hovered() ? theme.Cyan_100 : theme.White),
-						cornerRadius = {8, 8, 8, 8},
+						cornerRadius = clay.CornerRadiusAll(8),
 					},
 					) {
 						if clicked && clay.Hovered() {

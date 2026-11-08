@@ -26,7 +26,7 @@ sidebar_description_preserves_padding :: proc(t: ^testing.T) {
 	clay.SetMeasureTextFunction(sidebar_test_measure, nil)
 	app_state: state.AppState
 	clay.BeginLayout()
-	Sidebar(&app_state)
+	Sidebar(nil, &app_state)
 	commands := clay.EndLayout(1.0 / 60.0)
 	panel := clay.GetElementData(clay.ID("SidebarPanel")).boundingBox
 	testing.expect(t, commands.length > 0)
@@ -44,26 +44,26 @@ sidebar_description_preserves_padding :: proc(t: ^testing.T) {
 	second := clay.GetElementData(clay.ID("ArticleCard", 1)).boundingBox
 	clay.SetPointerState({first.x + 4, first.y + 4}, false)
 	clay.BeginLayout()
-	Sidebar(&app_state)
+	Sidebar(nil, &app_state)
 	commands = clay.EndLayout(1.0 / 60.0)
 	testing.expect_value(t, app_state.current_doc, "")
 
 	clay.SetPointerState({first.x + 4, first.y + 4}, true)
 	clay.BeginLayout()
-	Sidebar(&app_state)
+	Sidebar(nil, &app_state)
 	commands = clay.EndLayout(1.0 / 60.0)
 	testing.expect_value(t, app_state.current_doc, notes.notes_list[0].slug)
 
 	clay.SetPointerState({second.x + 4, second.y + 4}, true)
 	clay.BeginLayout()
-	Sidebar(&app_state)
+	Sidebar(nil, &app_state)
 	commands = clay.EndLayout(1.0 / 60.0)
 	testing.expect_value(t, app_state.current_doc, notes.notes_list[0].slug)
 
 	clay.SetPointerState({second.x + 4, second.y + 4}, false)
 	clay.SetPointerState({second.x + 4, second.y + 4}, true)
 	clay.BeginLayout()
-	Sidebar(&app_state)
+	Sidebar(nil, &app_state)
 	commands = clay.EndLayout(1.0 / 60.0)
 	testing.expect_value(t, app_state.current_doc, notes.notes_list[1].slug)
 	editor_mouse_scrolling_test(t)
