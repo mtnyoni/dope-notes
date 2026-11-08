@@ -76,7 +76,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 				}
 			}
 
-			if clay.UI()(
+			if clay.UI(clay.ID("NewNoteButton"))(
 			{
 				layout = {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(32)},
@@ -88,6 +88,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 				cornerRadius = clay.CornerRadiusAll(8),
 			},
 			) {
+				if clicked && clay.Hovered() do app_state.new_note_requested = true
 				if square_pen_icon != nil {
 					if clay.UI()(
 					{

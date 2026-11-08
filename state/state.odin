@@ -1,6 +1,9 @@
 package state
 
 import markdown "../markdown"
+import "core:fmt"
+import "core:os"
+import "core:strings"
 
 // Notebook and note IDs are file paths, so names can repeat across notebooks.
 // Owns the collection loaded by markdown.get_notes at startup. Release
@@ -9,6 +12,43 @@ AppState :: struct {
 	notebooks: [dynamic]markdown.Notebook,
 	current_notebook: string,
 	current_doc: string,
+	new_note_requested: bool,
+}
+
+create_note :: proc(app: ^AppState) -> os.Error {
+	notebook := current_notebook(app)
+	if notebook == nil do return nil
+	index := 1
+	name, path: string
+	for {
+		name = fmt.tprintf("Untitled-%d.md", index)
+		path = fmt.tprintf("%s/%s", notebook.path, name)
+		if !os.exists(path) do break
+		index += 1
+	}
+	if err := os.write_entire_file(path, ""); err != nil do return err
+	note := markdown.parse_note_file(name, path, nil)
+	append(&notebook.notes, note)
+	app.current_doc = note.path
+	return nil
+}
+
+update_note_content :: proc(app: ^AppState, path, text: string) {
+	for &notebook in app.notebooks {
+		for &note in notebook.notes {
+			if note.path != path do continue
+			if string(note.content) == text do return
+			delete(note.content)
+			note.content = make([]u8, len(text))
+			copy(note.content, transmute([]u8)text)
+			title, description := markdown.note_preview(text)
+			delete(note.title)
+			delete(note.description)
+			note.title = strings.clone(title)
+			note.description = strings.clone(description)
+			return
+		}
+	}
 }
 
 make_app_state :: proc(notebooks: [dynamic]markdown.Notebook, preferred_notebook: string = "business planning") -> AppState {

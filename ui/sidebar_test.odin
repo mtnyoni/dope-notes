@@ -74,6 +74,13 @@ sidebar_description_preserves_padding :: proc(t: ^testing.T) {
 	Sidebar(nil, &app_state)
 	commands = clay.EndLayout(1.0 / 60.0)
 	testing.expect_value(t, app_state.current_doc, notebook.notes[1].path)
+	new_note := clay.GetElementData(clay.ID("NewNoteButton")).boundingBox
+	clay.SetPointerState({new_note.x + 4, new_note.y + 4}, false)
+	clay.SetPointerState({new_note.x + 4, new_note.y + 4}, true)
+	clay.BeginLayout()
+	Sidebar(nil, &app_state)
+	commands = clay.EndLayout(1.0 / 60.0)
+	testing.expect(t, app_state.new_note_requested)
 	editor_mouse_scrolling_test(t)
 	editor_live_markdown_test(t)
 

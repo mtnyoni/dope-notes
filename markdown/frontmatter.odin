@@ -4,6 +4,28 @@ import "core:encoding/json"
 import "core:os"
 import "core:strings"
 
+// The first nonempty line is the title; Markdown heading markers are hidden.
+// The next nonempty line supplies the sidebar preview.
+note_preview :: proc(text: string) -> (title, description: string) {
+	title = "Untitled"
+	remaining := text
+	found_title := false
+	for raw in strings.split_lines_iterator(&remaining) {
+		line := strings.trim_space(raw)
+		if line == "" do continue
+		if !found_title {
+			line = strings.trim_left(line, "#")
+			line = strings.trim_space(line)
+			if line != "" do title = line
+			found_title = true
+		} else {
+			description = line
+			break
+		}
+	}
+	return
+}
+
 
 parse_note_file :: proc(
 	name, path: string,
@@ -52,20 +74,12 @@ parse_note_file :: proc(
 		field^ = frontmatter_scalar(value, allocator)
 	}
 
-	// Plain Markdown files do not require front matter.
-	remaining = body
-	for raw_line in strings.split_lines_iterator(&remaining) {
-		line := strings.trim_space(raw_line)
-		if strings.has_prefix(line, "# ") {
-			if note.title == "" do note.title = strings.clone(strings.trim_space(line[2:]), allocator)
-			continue
-		}
-		if len(line) == 0 || strings.has_prefix(line, "#") do continue
-		if note.description == "" do note.description = strings.clone(line, allocator)
-		break
-	}
+	// Keep explicit front matter, deriving missing preview fields from the body.
+	title, description := note_preview(body)
 	base := name[:len(name) - len(os.ext(name))]
-	if note.title == "" do note.title = strings.clone(base, allocator)
+	if strings.trim_space(body) == "" && !strings.has_prefix(base, "Untitled-") do title = base
+	if note.title == "" do note.title = strings.clone(title, allocator)
+	if note.description == "" do note.description = strings.clone(description, allocator)
 	if note.slug == "" do note.slug = strings.clone(base, allocator)
 	note.content = make([]u8, len(body), allocator)
 	copy(note.content, transmute([]u8)body)

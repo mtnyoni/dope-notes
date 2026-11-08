@@ -236,6 +236,13 @@ main :: proc() {
 				}
 			}
 		}
+		state.update_note_content(&app_state, loaded_doc, ui.editor_text(editor_state))
+		if app_state.new_note_requested {
+			app_state.new_note_requested = false
+			if err := state.create_note(&app_state); err != nil {
+				fmt.eprintln("Could not create note:", err)
+			}
+		}
 
 		width, height: i32
 		assert(sdl.GetWindowSize(window, &width, &height))
