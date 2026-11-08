@@ -16,11 +16,12 @@ measure_text :: proc "c" (
 ) -> clay.Dimensions {
 	face := cast(^font.Font)userData
 	width, height: c.int
-	if font.measure(
+	if font.measure_styled(
 		   face,
 		   cast([^]u8)text.chars,
 		   text.length,
 		   c.int(config.fontSize),
+		   c.int(config.fontId),
 		   &width,
 		   &height,
 	   ) ==

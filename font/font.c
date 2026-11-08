@@ -1,5 +1,6 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include FT_SYNTHESIS_H
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -45,14 +46,17 @@ void app_font_close(AppFont *font) {
   free(font);
 }
 
-static int set_size(AppFont *font, int pixel_size) {
-  return font && pixel_size > 0 &&
-         !FT_Set_Pixel_Sizes(font->face, 0, (FT_UInt)pixel_size);
+static int set_size(AppFont *font, int pixel_size, int style) {
+  if (!font || pixel_size <= 0 || FT_Set_Pixel_Sizes(font->face, 0, (FT_UInt)pixel_size))
+    return 0;
+  FT_Matrix transform = {1L << 16, (style & 2) ? 13107 : 0, 0, 1L << 16};
+  FT_Set_Transform(font->face, &transform, NULL);
+  return 1;
 }
 
-int app_font_measure(AppFont *font, const char *text, int length,
-                     int pixel_size, int *width, int *height) {
-  if (!set_size(font, pixel_size) || !text || length < 0)
+int app_font_measure_styled(AppFont *font, const char *text, int length,
+                     int pixel_size, int style, int *width, int *height) {
+  if (!set_size(font, pixel_size, style) || !text || length < 0)
     return 0;
   const char *cursor = text;
   const char *end = text + length;
@@ -65,8 +69,10 @@ int app_font_measure(AppFont *font, const char *text, int length,
       FT_Get_Kerning(font->face, previous, glyph, FT_KERNING_DEFAULT, &kerning);
       advance += kerning.x;
     }
-    if (!FT_Load_Glyph(font->face, glyph, FT_LOAD_DEFAULT))
+    if (!FT_Load_Glyph(font->face, glyph, FT_LOAD_DEFAULT)) {
+      if (style & 1) FT_GlyphSlot_Embolden(font->face->glyph);
       advance += font->face->glyph->advance.x;
+    }
     previous = glyph;
   }
   *width = (int)((advance + 63) >> 6);
@@ -74,10 +80,10 @@ int app_font_measure(AppFont *font, const char *text, int length,
   return 1;
 }
 
-int app_font_rasterize(AppFont *font, const char *text, int length,
-                       int pixel_size, unsigned char **pixels, int *width,
+int app_font_rasterize_styled(AppFont *font, const char *text, int length,
+                       int pixel_size, int style, unsigned char **pixels, int *width,
                        int *height) {
-  if (!app_font_measure(font, text, length, pixel_size, width, height))
+  if (!app_font_measure_styled(font, text, length, pixel_size, style, width, height))
     return 0;
   if (*width <= 0 || *height <= 0)
     return 0;
@@ -96,7 +102,9 @@ int app_font_rasterize(AppFont *font, const char *text, int length,
       FT_Get_Kerning(font->face, previous, glyph, FT_KERNING_DEFAULT, &kerning);
       pen += kerning.x;
     }
-    if (!FT_Load_Glyph(font->face, glyph, FT_LOAD_RENDER)) {
+    if (!FT_Load_Glyph(font->face, glyph, FT_LOAD_DEFAULT)) {
+      if (style & 1) FT_GlyphSlot_Embolden(font->face->glyph);
+      if (FT_Render_Glyph(font->face->glyph, FT_RENDER_MODE_NORMAL)) continue;
       FT_GlyphSlot slot = font->face->glyph;
       FT_Bitmap *bitmap = &slot->bitmap;
       int origin_x = (int)(pen >> 6) + slot->bitmap_left;
@@ -124,3 +132,12 @@ int app_font_rasterize(AppFont *font, const char *text, int length,
 }
 
 void app_font_free_bitmap(unsigned char *pixels) { free(pixels); }
+
+int app_font_measure(AppFont *font, const char *text, int length, int pixel_size,
+                     int *width, int *height) {
+  return app_font_measure_styled(font, text, length, pixel_size, 0, width, height);
+}
+int app_font_rasterize(AppFont *font, const char *text, int length, int pixel_size,
+                       unsigned char **pixels, int *width, int *height) {
+  return app_font_rasterize_styled(font, text, length, pixel_size, 0, pixels, width, height);
+}

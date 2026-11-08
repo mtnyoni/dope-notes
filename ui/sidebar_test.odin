@@ -1,6 +1,6 @@
 package ui
 
-import notes "../notes"
+import markdown "../markdown"
 import state "../state"
 import "core:c"
 import "core:testing"
@@ -24,13 +24,21 @@ sidebar_description_preserves_padding :: proc(t: ^testing.T) {
 		{},
 	)
 	clay.SetMeasureTextFunction(sidebar_test_measure, nil)
-	app_state: state.AppState
+	notebooks, err := markdown.get_notes()
+	testing.expect(t, err == nil)
+	if err != nil do return
+	defer markdown.free_notebooks(notebooks)
+	app_state := state.make_app_state(notebooks)
+	notebook := state.current_notebook(&app_state)
+	testing.expect(t, notebook != nil && len(notebook.notes) >= 2)
+	if notebook == nil || len(notebook.notes) < 2 do return
+	app_state.current_doc = ""
 	clay.BeginLayout()
 	Sidebar(nil, &app_state)
 	commands := clay.EndLayout(1.0 / 60.0)
 	panel := clay.GetElementData(clay.ID("SidebarPanel")).boundingBox
 	testing.expect(t, commands.length > 0)
-	for _, index in notes.notes_list {
+	for _, index in notebook.notes {
 		card := clay.GetElementData(clay.ID("ArticleCard", u32(index))).boundingBox
 		description := clay.GetElementData(clay.ID("ArticleDescription", u32(index))).boundingBox
 		testing.expect(t, description.x >= card.x + 8)
@@ -52,20 +60,21 @@ sidebar_description_preserves_padding :: proc(t: ^testing.T) {
 	clay.BeginLayout()
 	Sidebar(nil, &app_state)
 	commands = clay.EndLayout(1.0 / 60.0)
-	testing.expect_value(t, app_state.current_doc, notes.notes_list[0].slug)
+	testing.expect_value(t, app_state.current_doc, notebook.notes[0].path)
 
 	clay.SetPointerState({second.x + 4, second.y + 4}, true)
 	clay.BeginLayout()
 	Sidebar(nil, &app_state)
 	commands = clay.EndLayout(1.0 / 60.0)
-	testing.expect_value(t, app_state.current_doc, notes.notes_list[0].slug)
+	testing.expect_value(t, app_state.current_doc, notebook.notes[0].path)
 
 	clay.SetPointerState({second.x + 4, second.y + 4}, false)
 	clay.SetPointerState({second.x + 4, second.y + 4}, true)
 	clay.BeginLayout()
 	Sidebar(nil, &app_state)
 	commands = clay.EndLayout(1.0 / 60.0)
-	testing.expect_value(t, app_state.current_doc, notes.notes_list[1].slug)
+	testing.expect_value(t, app_state.current_doc, notebook.notes[1].path)
 	editor_mouse_scrolling_test(t)
+	editor_markdown_preview_test(t)
 
 }

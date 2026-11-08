@@ -6,7 +6,8 @@ import "core:c"
 import "core:fmt"
 import "core:mem"
 import font "font"
-import notes "notes"
+import markdown "markdown"
+import buffer "buffer"
 import clay "shared:clay"
 import theme "theme"
 import ui "ui"
@@ -85,20 +86,23 @@ main :: proc() {
 	}
 	defer clay_ui.destroy_clay_renderer(&clay_renderer)
 
-	app_state := state.AppState {
-		current_doc = notes.notes_list[0].slug,
-	}
-
-	note := notes.get_note_by_slug(app_state.current_doc)
-	if note == nil {
-		fmt.eprintln("Note not found:", app_state.current_doc)
+	notebooks, notebook_err := markdown.get_notes()
+	if notebook_err != nil {
+		fmt.eprintln("Could not load notebooks:", notebook_err)
 		return
 	}
+	app_state := state.make_app_state(notebooks)
+	defer markdown.free_notebooks(app_state.notebooks)
 
 	documents: ui.EditorDocuments
 	defer ui.editor_close_documents(&documents)
-	editor_state := ui.editor_open_note(&documents, note, face)
-	loaded_slug := note.slug
+	empty_editor := ui.EditorState{buf = buffer.make_gap_buffer(64), face = face}
+	defer ui.editor_destroy_state(&empty_editor)
+	editor_state := &empty_editor
+	if note := state.current_note(&app_state); note != nil {
+		editor_state = ui.editor_open_note(&documents, note, face)
+	}
+	loaded_doc := app_state.current_doc
 
 	if !sdl.StartTextInput(window) {
 		fmt.eprintln("Could not start text input:", sdl.GetError())
@@ -179,14 +183,17 @@ main :: proc() {
 			}
 		}
 
-		if app_state.current_doc != loaded_slug {
-			selected_note := notes.get_note_by_slug(app_state.current_doc)
+		if app_state.current_doc != loaded_doc {
+			selected_note := state.current_note(&app_state)
 			if selected_note != nil {
 				editor_state = ui.editor_open_note(&documents, selected_note, face)
-				loaded_slug = selected_note.slug
+				loaded_doc = selected_note.path
+			} else if app_state.current_doc == "" {
+				editor_state = &empty_editor
+				loaded_doc = ""
 			} else {
 				fmt.eprintln("Note not found:", app_state.current_doc)
-				app_state.current_doc = loaded_slug
+				app_state.current_doc = loaded_doc
 			}
 		}
 

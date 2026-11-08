@@ -4,6 +4,8 @@ A desktop notes editor built with Odin, SDL3, Clay, and FreeType. It includes a 
 
 Edits and per-note cursor/scroll positions are currently kept in memory. Changes are not saved to disk yet.
 
+Notebooks are loaded at startup from `markdown/files/`. Each immediate subdirectory is a notebook; its `.md` and `.markdown` files are notes. The app selects `business planning` by default, or the first notebook if that folder is absent. The sidebar reads `title` and `description` from flat front matter, with heading/filename and first-paragraph fallbacks for plain Markdown. Notebook creation and switching controls are planned; application state already supports selecting a notebook by path.
+
 ## Supported setup
 
 - **Linux:** native build and desktop application. The commands below target x86-64.
@@ -15,21 +17,21 @@ Linux compilation, tests, and a headless startup have been checked. The Windows/
 
 Install [Odin](https://odin-lang.org/docs/install/) and put its executable on `PATH`. Use a recent version that includes `vendor:sdl3`.
 
-You also need Git, Clang, `ar` (binutils), `pkg-config`, the SDL3 development library, FreeType development headers, and [just](https://github.com/casey/just#installation).
+You also need Git, Clang, `ar` (binutils), `pkg-config`, the SDL3 and SDL3_image development libraries, CommonMark (`libcmark`), FreeType development headers, and [just](https://github.com/casey/just#installation).
 
 The development environment used to check these instructions has Odin `dev-2026-09-nightly:a2fb372`, SDL3 `3.4.18`, and just `1.58.0`.
 
 ### Fedora
 
 ```sh
-sudo dnf install git clang binutils pkgconf-pkg-config SDL3-devel freetype-devel just
+sudo dnf install git clang binutils pkgconf-pkg-config SDL3-devel SDL3_image-devel cmark-devel freetype-devel just
 ```
 
 ### Ubuntu / Debian / Ubuntu on WSL2
 
 ```sh
 sudo apt update
-sudo apt install git build-essential clang pkg-config libfreetype6-dev
+sudo apt install git build-essential clang pkg-config libfreetype6-dev libcmark-dev
 ```
 
 Install `just` using its [Linux release binary](https://github.com/casey/just/releases), or `sudo apt install just` if your distribution provides it. Install Odin's **Linux** release inside WSL, not `odin.exe` for Windows.
@@ -37,7 +39,7 @@ Install `just` using its [Linux release binary](https://github.com/casey/just/re
 If your distribution provides SDL3, install it:
 
 ```sh
-sudo apt install libsdl3-dev
+sudo apt install libsdl3-dev libsdl3-image-dev
 ```
 
 If `libsdl3-dev` is unavailable, build SDL3 from source:
@@ -123,7 +125,7 @@ just build
 ./dope-notes
 ```
 
-Both recipes create the collection link and pass `-collection:shared=./odin_shared`. They do not rebuild the font bridge automatically; run `just font-build` first on a fresh checkout.
+Both recipes create the collection link, rebuild the font bridge, and pass `-collection:shared=./odin_shared`. Rebuilding the bridge keeps its native font functions in sync with the Odin bindings.
 
 The equivalent run command is:
 
@@ -175,6 +177,20 @@ The checked-in `ols.json` contains a developer-specific absolute path. Replace i
 
 Inside WSL, use the Linux path, not a `C:\\...` path. Run `just setup-shared` and restart OLS after editing the configuration. `ols.json` configures the language server; terminal compiler commands still need the collection flag.
 
+## Markdown preview
+
+Notes open in a formatted CommonMark preview. Use **Edit** in the toolbar to edit the Markdown source, and **Preview** to render the updated buffer. Preview supports headings, paragraphs, bold and italic text, lists, quotes, code blocks, rules, and styled link labels. The source buffer and per-note edits remain in memory when switching views.
+
+The renderer uses Odin's `vendor:commonmark` binding, which links `libcmark` on Linux. Install it before building:
+
+```sh
+# Fedora
+sudo dnf install cmark-devel
+
+# Ubuntu / Debian / WSL Ubuntu
+sudo apt install libcmark-dev
+```
+
 ## Checks and tests
 
 Run from the repository root after building the dependencies:
@@ -182,6 +198,8 @@ Run from the repository root after building the dependencies:
 ```sh
 odin check . -collection:shared=./odin_shared
 odin test buffer
+odin test markdown -collection:shared=./odin_shared
+odin test state -collection:shared=./odin_shared
 odin test ui -collection:shared=./odin_shared
 odin test ui/clay -collection:shared=./odin_shared
 ```
@@ -189,7 +207,8 @@ odin test ui/clay -collection:shared=./odin_shared
 ## Troubleshooting
 
 - **`Path does not exist: shared:clay`:** check that Clay was cloned, run `just setup-shared`, and pass the collection flag. For editor errors, update `ols.json` and restart OLS.
-- **Missing `font/font.a` or `ft2build.h`:** install FreeType development headers and run `just font-build`.
+- **Missing `-lcmark` at link time:** install `cmark-devel` (Fedora) or `libcmark-dev` (Ubuntu/Debian).
+- **Missing `font/font.a`, styled-font symbols, or `ft2build.h`:** install FreeType development headers and run `just font-build`.
 - **Missing `SDL3` at link time:** install SDL3 development files; `pkg-config --modversion sdl3` should succeed. If built from source, run `sudo ldconfig`.
 - **`No available video device`:** launch from a graphical Linux session or a WSL2 session with WSLg. For WSL, update WSL and restart it with `wsl --shutdown` in PowerShell before reopening Ubuntu.
 - **Renderer initialization fails:** try `SDL_RENDER_DRIVER=software just run` to use software rendering.

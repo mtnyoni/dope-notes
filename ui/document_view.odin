@@ -10,10 +10,10 @@ DocumentView :: proc(ed: ^EditorState, input: ScrollInput = {}, delta_seconds: f
 	if bounds.found do ed.scroll.view_height = max(0, bounds.boundingBox.height)
 	ed.scroll.content_height = max(
 		ed.scroll.view_height,
-		f32(len(prepared.lines) * EDITOR_LINE_HEIGHT + EDITOR_PADDING * 2),
+		prepared.height,
 	)
 
-	if ed.reveal_cursor && bounds.found {
+	if ed.reveal_cursor && ed.view_mode == .Source && bounds.found {
 		caret_top := f32(EDITOR_PADDING + prepared.cursor_line * EDITOR_LINE_HEIGHT)
 		caret_bottom := caret_top + EDITOR_LINE_HEIGHT
 		if caret_top < ed.scroll.target + EDITOR_PADDING {
@@ -51,7 +51,7 @@ DocumentView :: proc(ed: ^EditorState, input: ScrollInput = {}, delta_seconds: f
 		},
 		) {
 			Editor(ed, &prepared)
-			Annotations(&prepared)
+			Annotations(&prepared, &ed.scroll)
 		}
 	}
 	Scrollbar(clay.ID(DOCUMENT_SCROLL_ID), &ed.scroll)

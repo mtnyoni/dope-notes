@@ -2,7 +2,8 @@ package ui
 
 import buffer "../buffer"
 import font "../font"
-import notes "../notes"
+import markdown "../markdown"
+import commonmark "vendor:commonmark"
 
 // Each opened note owns its editor state, keeping edits and cursor position
 // when the user switches to another note and back.
@@ -10,33 +11,39 @@ EditorDocuments :: struct {
 	editors: map[string]^EditorState,
 }
 
-editor_open_note :: proc(documents: ^EditorDocuments, note: ^notes.Note, face: ^font.Font) -> ^EditorState {
+editor_open_note :: proc(documents: ^EditorDocuments, note: ^markdown.NoteFile, face: ^font.Font) -> ^EditorState {
 	if note == nil do return nil
-	if ed, found := documents.editors[note.slug]; found {
+	if ed, found := documents.editors[note.path]; found {
 		return ed
 	}
 	if documents.editors == nil do documents.editors = make(map[string]^EditorState)
 
 	ed := new(EditorState)
 	ed^ = EditorState {
-		buf = buffer.make_gap_buffer(max(64, len(note.title) + 2 + len(note.content))),
+		buf = buffer.make_gap_buffer(max(64, len(note.content))),
 		face = face,
-		focused = true,
-		reveal_cursor = true,
+		focused = false,
+		view_mode = .Preview,
+		preview_dirty = true,
+		reveal_cursor = false,
 	}
-	buffer.insert(&ed.buf, 0, note.title)
-	buffer.insert(&ed.buf, len(note.title), "\n\n")
-	buffer.insert(&ed.buf, len(note.title) + 2, note.content)
+	buffer.insert(&ed.buf, 0, note.content)
 	buffer.shift_gap_to(&ed.buf, 0)
-	documents.editors[note.slug] = ed
+	documents.editors[note.path] = ed
 	return ed
 }
 
 editor_close_documents :: proc(documents: ^EditorDocuments) {
 	for _, ed in documents.editors {
-		buffer.destroy_gap_buffer(&ed.buf)
+		editor_destroy_state(ed)
 		free(ed)
 	}
 	delete(documents.editors)
 	documents^ = {}
+}
+
+editor_destroy_state :: proc(ed: ^EditorState) {
+	if ed.preview_ast != nil do commonmark.node_free(ed.preview_ast)
+	buffer.destroy_gap_buffer(&ed.buf)
+	ed^ = {}
 }

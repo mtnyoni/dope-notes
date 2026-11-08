@@ -2,6 +2,9 @@ package ui
 
 import buffer "../buffer"
 import font "../font"
+import markdown "../markdown"
+import clay_ui "./clay"
+import commonmark "vendor:commonmark"
 import theme "../theme"
 import "core:c"
 import clay "shared:clay"
@@ -14,7 +17,12 @@ EDITOR_LINE_HEIGHT :: 24
 EDITOR_PADDING :: 12
 CARET_WIDTH :: 2
 
+EditorViewMode :: enum { Source, Preview }
+
 EditorState :: struct {
+	view_mode: EditorViewMode,
+	preview_ast: ^commonmark.Node,
+	preview_dirty: bool,
 	buf:                buffer.GapBuffer,
 	cursor:             buffer.BufferPosition,
 	focused:            bool,
@@ -35,6 +43,8 @@ EditorTextLayout :: struct {
 	text:        string,
 	lines:       [dynamic]EditorLine,
 	cursor_line: int,
+	height: f32,
+	preview: markdown.DocumentLayout,
 }
 
 editor_prepare_layout :: proc(ed: ^EditorState) -> EditorTextLayout {
@@ -44,7 +54,20 @@ editor_prepare_layout :: proc(ed: ^EditorState) -> EditorTextLayout {
 	}
 	text := editor_text(ed)
 	lines := editor_lines(ed, text)
-	return {text, lines, editor_cursor_line(lines[:], ed.cursor)}
+	prepared := EditorTextLayout {
+		text = text, lines = lines, cursor_line = editor_cursor_line(lines[:], ed.cursor),
+		height = f32(len(lines) * EDITOR_LINE_HEIGHT + EDITOR_PADDING * 2),
+	}
+	if ed.view_mode == .Preview {
+		if ed.preview_ast == nil || ed.preview_dirty {
+			if ed.preview_ast != nil do commonmark.node_free(ed.preview_ast)
+			ed.preview_ast = commonmark.parse_document_from_string(text, {.Validate_UTF8})
+			ed.preview_dirty = false
+		}
+		prepared.preview = markdown.prepare_markdown_layout(ed.preview_ast, editor_markdown_options(ed))
+		prepared.height = prepared.preview.height + EDITOR_PADDING * 2
+	}
+	return prepared
 }
 
 Editor :: proc(ed: ^EditorState, prepared: ^EditorTextLayout) {
@@ -64,38 +87,42 @@ Editor :: proc(ed: ^EditorState, prepared: ^EditorTextLayout) {
 		cornerRadius = clay.CornerRadiusAll(8),
 	},
 	) {
-		for line, i in prepared.lines {
-			if clay.UI(clay.ID("EditorLine", u32(i)))(
-			{
-				layout = {
-					sizing = {
-						width = clay.SizingGrow(),
-						height = clay.SizingFixed(EDITOR_LINE_HEIGHT),
+		if ed.view_mode == .Preview {
+			markdown.render_markdown_ast_to_clay(ed.preview_ast, editor_markdown_options(ed), &prepared.preview)
+		} else {
+			for line, i in prepared.lines {
+				if clay.UI(clay.ID("EditorLine", u32(i)))(
+				{
+					layout = {
+						sizing = {
+							width = clay.SizingGrow(),
+							height = clay.SizingFixed(EDITOR_LINE_HEIGHT),
+						},
 					},
 				},
-			},
-			) {
-				if line.end > line.start do clay.Text(prepared.text[line.start:line.end], text_cfg)
-				if ed.focused && i == prepared.cursor_line {
-					x := editor_text_width(ed, prepared.text[line.start:ed.cursor])
-					if clay.UI(clay.ID("Caret"))(
-					{
-						layout = {
-							sizing = {
-								width = clay.SizingFixed(CARET_WIDTH),
-								height = clay.SizingFixed(20),
+				) {
+					if line.end > line.start do clay.Text(prepared.text[line.start:line.end], text_cfg)
+					if ed.focused && i == prepared.cursor_line {
+						x := editor_text_width(ed, prepared.text[line.start:ed.cursor])
+						if clay.UI(clay.ID("Caret"))(
+						{
+							layout = {
+								sizing = {
+									width = clay.SizingFixed(CARET_WIDTH),
+									height = clay.SizingFixed(20),
+								},
 							},
+							floating = {
+								attachTo = .Parent,
+								offset = {x, 0},
+								zIndex = 1,
+								pointerCaptureMode = .Passthrough,
+								clipTo = .AttachedParent,
+							},
+							backgroundColor = theme.Light.text,
 						},
-						floating = {
-							attachTo = .Parent,
-							offset = {x, 0},
-							zIndex = 1,
-							pointerCaptureMode = .Passthrough,
-							clipTo = .AttachedParent,
-						},
-						backgroundColor = theme.Light.text,
-					},
-					) {}
+						) {}
+					}
 				}
 			}
 		}
@@ -130,7 +157,7 @@ editor_move_vertical :: proc(ed: ^EditorState, direction: int) {
 }
 
 editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
-	if !ed.focused do return
+	if !ed.focused || ed.view_mode == .Preview do return
 	buf := &ed.buf
 	vertical := false
 
@@ -139,23 +166,27 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 		s := string(e.text.text)
 		buffer.insert(buf, ed.cursor, s)
 		ed.cursor += len(s)
+		ed.preview_dirty = true
 
 	case .KEY_DOWN:
 		switch e.key.key {
 		case sdl.K_RETURN, sdl.K_KP_ENTER:
 			buffer.insert(buf, ed.cursor, "\n")
 			ed.cursor += 1
+			ed.preview_dirty = true
 
 		case sdl.K_BACKSPACE:
 			if ed.cursor > 0 {
 				p := buffer.prev_rune_start(buf, ed.cursor)
 				buffer.remove(buf, p, ed.cursor - p)
 				ed.cursor = p
+				ed.preview_dirty = true
 			}
 
 		case sdl.K_DELETE:
 			n := buffer.next_rune_end(buf, ed.cursor) - ed.cursor
 			buffer.remove(buf, ed.cursor, n)
+			if n > 0 do ed.preview_dirty = true
 
 		case sdl.K_LEFT:
 			ed.cursor = buffer.prev_rune_start(buf, ed.cursor)
@@ -241,4 +272,16 @@ editor_cursor_line :: proc(lines: []EditorLine, cursor: int) -> int {
 		if cursor == line.end && (i == len(lines) - 1 || lines[i + 1].start > cursor) do return i
 	}
 	return len(lines) - 1
+}
+
+editor_markdown_options :: proc(ed: ^EditorState) -> markdown.RenderOptions {
+	return {width = ed.content_width > 0 ? ed.content_width : 400, measure = clay_ui.measure_text, user_data = ed.face}
+}
+
+editor_toggle_preview :: proc(ed: ^EditorState) {
+	ed.view_mode = ed.view_mode == .Preview ? .Source : .Preview
+	ed.focused = ed.view_mode == .Source
+	ed.reveal_cursor = ed.focused
+	ed.scroll.offset = 0
+	ed.scroll.target = 0
 }

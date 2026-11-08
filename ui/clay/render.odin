@@ -15,6 +15,7 @@ RotatedImage :: struct {
 Cached_Text :: struct {
 	label:         string,
 	pixel_size:    i32,
+	style: u16,
 	texture:       ^sdl.Texture,
 	width, height: i32,
 }
@@ -157,7 +158,7 @@ render_clay :: proc(
 			data := command.renderData.text
 			label := string(data.stringContents.chars[:data.stringContents.length])
 			pixel_size := max(1, i32(math.round(f32(data.fontSize) * scale_y)))
-			entry := get_text(state, renderer, label, pixel_size)
+			entry := get_text(state, renderer, label, pixel_size, data.fontId)
 			if entry != nil {
 				dst := sdl.FRect{rect.x, rect.y, f32(entry.width), f32(entry.height)}
 				draw_tinted(renderer, entry.texture, dst, data.textColor)
@@ -222,17 +223,19 @@ get_text :: proc(
 	renderer: ^sdl.Renderer,
 	label: string,
 	pixel_size: i32,
+	style: u16,
 ) -> ^Cached_Text {
 	for &entry in state.texts {
-		if entry.pixel_size == pixel_size && entry.label == label do return &entry
+		if entry.pixel_size == pixel_size && entry.style == style && entry.label == label do return &entry
 	}
 	pixels: ^u8
 	width, height: c.int
-	if font.rasterize(
+	if font.rasterize_styled(
 		   state.font,
 		   raw_data(label),
 		   c.int(len(label)),
 		   pixel_size,
+		   c.int(style),
 		   &pixels,
 		   &width,
 		   &height,
@@ -246,7 +249,7 @@ get_text :: proc(
 	assert(sdl.UpdateTexture(texture, nil, pixels, width * 4))
 	assert(sdl.SetTextureBlendMode(texture, sdl.BLENDMODE_BLEND))
 	assert(sdl.SetTextureScaleMode(texture, .LINEAR))
-	append(&state.texts, Cached_Text{strings.clone(label), pixel_size, texture, width, height})
+	append(&state.texts, Cached_Text{strings.clone(label), pixel_size, style, texture, width, height})
 	return &state.texts[len(state.texts) - 1]
 }
 

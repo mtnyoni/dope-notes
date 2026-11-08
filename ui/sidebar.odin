@@ -1,7 +1,7 @@
 package ui
 
 import assets "../assets"
-import notes "../notes"
+import markdown "../markdown"
 import state "../state"
 import theme "../theme"
 import clay "shared:clay"
@@ -10,6 +10,13 @@ SIDEBAR_ITEM_TITLE_FONT_SIZE :: 13
 SIDEBAR_ITEM_DESCRIPTION_FONT_SIZE :: 12
 
 Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
+	notebook := state.current_notebook(app_state)
+	notebook_name := "No notebooks"
+	note_files: []markdown.NoteFile
+	if notebook != nil {
+		notebook_name = notebook.name
+		note_files = notebook.notes[:]
+	}
 	clicked := clay.GetPointerState().state == .PressedThisFrame
 	chevron_up_down_icon := assets.get(ui_assets, .ChevronsUpDown)
 	search_icon := assets.get(ui_assets, .Search)
@@ -48,7 +55,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 			},
 			) {
 				clay.Text(
-					"Business Planning",
+					notebook_name,
 					{
 						fontId = 0,
 						fontSize = SIDEBAR_ITEM_TITLE_FONT_SIZE + 1,
@@ -145,7 +152,10 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 				},
 			},
 			) {
-				for article, index in notes.notes_list {
+				if len(note_files) == 0 {
+					clay.Text("No notes yet", {fontSize = SIDEBAR_ITEM_DESCRIPTION_FONT_SIZE, textColor = theme.Light.text_secondary})
+				}
+				for article, index in note_files {
 					if clay.UI(clay.ID("ArticleCard", u32(index)))(
 					{
 						layout = {
@@ -154,12 +164,12 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 							padding = clay.PaddingAll(12),
 							childGap = 4,
 						},
-						backgroundColor = app_state.current_doc == article.slug ? theme.Cyan_200 : (clay.Hovered() ? theme.Cyan_100 : theme.White),
+						backgroundColor = app_state.current_doc == article.path ? theme.Cyan_200 : (clay.Hovered() ? theme.Cyan_100 : theme.White),
 						cornerRadius = clay.CornerRadiusAll(8),
 					},
 					) {
 						if clicked && clay.Hovered() {
-							app_state.current_doc = article.slug
+							app_state.current_doc = article.path
 						}
 
 						if clay.UI(clay.ID("ArticleTitle", u32(index)))(

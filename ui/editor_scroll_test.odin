@@ -24,6 +24,8 @@ editor_mouse_scrolling_test :: proc(t: ^testing.T) {
 	viewport := clay.GetElementData(clay.ID(DOCUMENT_SCROLL_ID)).boundingBox
 	initial_editor := clay.GetElementData(clay.ID(EDITOR_ID)).boundingBox
 	initial_annotations := clay.GetElementData(clay.ID("Annotations")).boundingBox
+	initial_map := clay.GetElementData(clay.ID("AnnotationsMap")).boundingBox
+	initial_indicator := clay.GetElementData(clay.ID("AnnotationMapIndicator")).boundingBox
 	testing.expect(t, ed.scroll.content_height > ed.scroll.view_height)
 	testing.expect(t, clay.GetElementData(clay.ID("ScrollTrack", clay.ID(DOCUMENT_SCROLL_ID).id)).found)
 
@@ -34,6 +36,11 @@ editor_mouse_scrolling_test :: proc(t: ^testing.T) {
 	annotation_bounds := clay.GetElementData(clay.ID("Annotations")).boundingBox
 	testing.expect(t, abs(initial_editor.y - editor_bounds.y - ed.scroll.offset) < 0.1)
 	testing.expect(t, abs(initial_annotations.y - annotation_bounds.y - ed.scroll.offset) < 0.1)
+	map_bounds := clay.GetElementData(clay.ID("AnnotationsMap")).boundingBox
+	indicator := clay.GetElementData(clay.ID("AnnotationMapIndicator")).boundingBox
+	testing.expect_value(t, map_bounds.y, initial_map.y)
+	testing.expect(t, indicator.y > initial_indicator.y)
+	testing.expect(t, indicator.x >= map_bounds.x && indicator.x + indicator.width <= map_bounds.x + map_bounds.width)
 
 	// Wheel input over the annotation pane controls the same parent.
 	previous_target := ed.scroll.target
@@ -60,6 +67,10 @@ editor_mouse_scrolling_test :: proc(t: ^testing.T) {
 	testing.expect_value(t, ed.scroll.offset, ed.scroll.content_height - ed.scroll.view_height)
 	thumb := clay.GetElementData(clay.ID("ScrollThumb", clay.ID(DOCUMENT_SCROLL_ID).id)).boundingBox
 	testing.expect(t, abs(thumb.y + thumb.height - (viewport.y + viewport.height)) < 1)
+	map_bounds = clay.GetElementData(clay.ID("AnnotationsMap")).boundingBox
+	indicator = clay.GetElementData(clay.ID("AnnotationMapIndicator")).boundingBox
+	testing.expect_value(t, map_bounds.y, viewport.y)
+	testing.expect(t, indicator.y + indicator.height <= map_bounds.y + map_bounds.height - EDITOR_PADDING + 1)
 
 	// Dragging follows the pointer directly, including outside the viewport.
 	editor_test_scroll_frame(&ed, {mouse = {thumb.x + 2, thumb.y + thumb.height / 2}, left_down = true, left_pressed = true, pointer_in_window = true})
