@@ -65,7 +65,6 @@ main :: proc() {
 	defer clay_ui.destroy_clay_renderer(&clay_renderer)
 
 	buf := buffer.make_gap_buffer(64)
-	defer buffer.destroy_gap_buffer(&buf)
 
 	buffer.insert(&buf, 0, '0')
 	buffer.insert(&buf, 1, rune('1'))
@@ -74,9 +73,20 @@ main :: proc() {
 	buffer.shift_gap_to(&buf, 5)
 
 	editor_state := ui.EditorState {
+		face    = face,
 		buf     = buf,
 		cursor  = 5,
 		focused = true,
+	}
+	defer buffer.destroy_gap_buffer(&editor_state.buf)
+	if !sdl.StartTextInput(window) {
+		fmt.eprintln("Could not start text input:", sdl.GetError())
+		return
+	}
+	defer {
+		if !sdl.StopTextInput(window) {
+			fmt.eprintln("Could not stop text input:", sdl.GetError())
+		}
 	}
 
 	running := true

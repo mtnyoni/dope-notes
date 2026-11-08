@@ -1,7 +1,10 @@
 run: setup-shared
     odin run . -collection:shared=./odin_shared
 
-build:
+build: setup-shared
+    odin build . -collection:shared=./odin_shared
+
+font-build:
     bash font/build.sh
 
 setup-shared:
