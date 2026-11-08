@@ -1,8 +1,6 @@
-package main
+package buffer
 
 import "base:runtime"
-import "core:bufio"
-import "core:debug/trace"
 import "core:mem"
 import "core:unicode/utf8"
 
@@ -25,7 +23,7 @@ make_gap_buffer :: proc(n_bytes: int, allocator := context.allocator) -> GapBuff
 }
 
 destroy_gap_buffer :: proc(buf: ^GapBuffer) {
-	delete(buf.buffer)
+	delete(buf.buffer, buf.allocator)
 }
 
 shift_gap_to :: proc(buf: ^GapBuffer, cursor: BufferPosition) {
@@ -46,29 +44,25 @@ shift_gap_to :: proc(buf: ^GapBuffer, cursor: BufferPosition) {
 	}
 }
 
-check_gap_size :: proc(buf: ^GapBuffer, n_required: int) {
-	gap_len := buf.gap_end - buf.gap_start
-	if gap_len >= n_required do return
+ensure_gap_size :: proc(buf: ^GapBuffer, n_required: int) -> runtime.Allocator_Error {
+	if buf.gap_end - buf.gap_start >= n_required do return nil
 
-
-	new_cap := max(len(buf.buffer) * 2, len(buf.buffer) + n_required)
-	new_buf := make([]u8, new_cap, buf.allocator)
+	old_capacity := len(buf.buffer)
+	new_capacity := max(old_capacity * 2, old_capacity + n_required, 64)
+	new_buf, err := make([]u8, new_capacity, buf.allocator)
+	if err != nil do return err
 
 	left_len := buf.gap_start
-	right_len := len(buf.buffer) - buf.gap_end
-	new_gap_end := new_cap - right_len
+	right_len := old_capacity - buf.gap_end
+	new_gap_end := new_capacity - right_len
 
-	if left_len > 0 {
-		copy(new_buf[:left_len], buf.buffer[:left_len])
-	}
+	copy(new_buf[:left_len], buf.buffer[:left_len])
+	copy(new_buf[new_gap_end:], buf.buffer[buf.gap_end:])
 
-	if right_len > 0 {
-		copy(new_buf[new_gap_end:], buf.buffer[buf.gap_end:])
-	}
-
-	delete(buf.buffer)
+	delete(buf.buffer, buf.allocator)
 	buf.buffer = new_buf
 	buf.gap_end = new_gap_end
+	return nil
 }
 
 insert :: proc {
@@ -79,7 +73,7 @@ insert :: proc {
 }
 
 insert_char :: proc(buf: ^GapBuffer, cursor: BufferPosition, char: u8) {
-	check_gap_size(buf, 1)
+	ensure_gap_size(buf, 1)
 	shift_gap_to(buf, cursor)
 
 	buf.buffer[buf.gap_start] = char
@@ -92,7 +86,7 @@ insert_rune :: proc(buf: ^GapBuffer, cursor: BufferPosition, r: rune) {
 }
 
 insert_slice :: proc(buf: ^GapBuffer, cursor: BufferPosition, slice: []u8) {
-	check_gap_size(buf, len(slice))
+	ensure_gap_size(buf, len(slice))
 	shift_gap_to(buf, cursor)
 
 	copy_slice(buf.buffer[buf.gap_start:], slice)
