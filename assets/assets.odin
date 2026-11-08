@@ -8,6 +8,17 @@ Icon :: enum {
 	ChevronsUpDown,
 	SquarePen,
 	Search,
+	Slash,
+	Link,
+	List,
+	ListOrdered,
+	TextAlignStart,
+	Underline,
+	LetterB,
+	ChevronDown,
+	Redo,
+	Undo,
+	EllipsisVertical,
 }
 
 // Register new icons here; loading and cleanup are handled for every entry.
@@ -15,6 +26,17 @@ ICON_PATHS :: [Icon]cstring {
 	.ChevronsUpDown = "assets/icons/chevrons-up-down.png",
 	.SquarePen      = "assets/icons/square-pen.png",
 	.Search         = "assets/icons/search.png",
+	.Slash          = "assets/icons/slash.png",
+	.Link           = "assets/icons/link.png",
+	.List           = "assets/icons/list.png",
+	.ListOrdered    = "assets/icons/list-ordered.png",
+	.TextAlignStart = "assets/icons/text-align-start.png",
+	.Underline      = "assets/icons/underline.png",
+	.LetterB        = "assets/icons/letter-b.png",
+	.ChevronDown    = "assets/icons/chevron-down.png",
+	.Redo           = "assets/icons/redo.png",
+	.Undo           = "assets/icons/undo.png",
+	.EllipsisVertical = "assets/icons/ellipsis-vertical.png",
 }
 
 Manager :: struct {

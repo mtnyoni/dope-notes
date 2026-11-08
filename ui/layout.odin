@@ -35,7 +35,7 @@ UILayout :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState, ed: ^Ed
 				backgroundColor = theme.Light.surface,
 			},
 			) {
-				EditorToolBar()
+				EditorToolBar(ui_assets)
 
 				if clay.UI()(
 				{
@@ -52,20 +52,5 @@ UILayout :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState, ed: ^Ed
 				}
 			}
 		}
-	}
-}
-
-EditorToolBar :: proc() {
-	if clay.UI()(
-	{
-		layout = {
-			sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(40)},
-			layoutDirection = .LeftToRight,
-			padding = {0, 8, 8, 8},
-		},
-		border = {color = theme.Light.border, width = {0, 0, 0, 1, 0}},
-	},
-	) {
-
 	}
 }

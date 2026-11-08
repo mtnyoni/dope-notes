@@ -7,6 +7,11 @@ import "core:strings"
 import clay "shared:clay"
 import sdl "vendor:sdl3"
 
+RotatedImage :: struct {
+	texture: ^sdl.Texture,
+	angle:   f64, // Clockwise degrees; rotation is around the image center.
+}
+
 Cached_Text :: struct {
 	label:         string,
 	pixel_size:    i32,
@@ -156,11 +161,30 @@ render_clay :: proc(
 		case .Image:
 			texture := cast(^sdl.Texture)command.renderData.image.imageData
 			if texture != nil do assert(sdl.RenderTexture(renderer, texture, nil, &rect))
+		case .Custom:
+			data := cast(^RotatedImage)command.renderData.custom.customData
+			if data != nil && data.texture != nil {
+				assert(
+					sdl.RenderTextureRotated(
+						renderer,
+						data.texture,
+						nil,
+						&rect,
+						data.angle,
+						nil,
+						.NONE,
+					),
+				)
+			}
 		}
 	}
 }
 
-intersect_clip :: proc(parent: sdl.Rect, bounds: sdl.FRect, axes: clay.ClipRenderData) -> sdl.Rect {
+intersect_clip :: proc(
+	parent: sdl.Rect,
+	bounds: sdl.FRect,
+	axes: clay.ClipRenderData,
+) -> sdl.Rect {
 	result := parent
 	if axes.horizontal {
 		left := max(parent.x, i32(math.ceil(bounds.x)))
