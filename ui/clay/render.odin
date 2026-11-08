@@ -1,10 +1,10 @@
 package ui
 
+import font "../../font"
 import "core:c"
 import "core:math"
 import "core:strings"
 import clay "shared:clay"
-import font "ui/font"
 import sdl "vendor:sdl3"
 
 Cached_Text :: struct {

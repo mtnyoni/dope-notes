@@ -1,7 +1,7 @@
 package ui
+import font "../../font"
 import "core:c"
 import clay "shared:clay"
-import font "ui/font"
 
 errorHandler :: proc "c" (errorData: clay.ErrorData) {
 	if (errorData.errorType == clay.ErrorType.DuplicateId) {
