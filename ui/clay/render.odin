@@ -102,7 +102,11 @@ render_clay :: proc(
 		if command.commandType == .ScissorStart {
 			parent := base_clip
 			if len(clips) > 0 do parent = clips[len(clips) - 1]
-			clip := intersect_clip(parent, rect, command.renderData.clip)
+			axes := command.renderData.clip
+			// Clay's inherited clip for floating elements (such as the caret)
+			// supplies bounds without axis flags. It still clips on both axes.
+			if !axes.horizontal && !axes.vertical do axes = {horizontal = true, vertical = true}
+			clip := intersect_clip(parent, rect, axes)
 			append(&clips, clip)
 			assert(sdl.SetRenderClipRect(renderer, &clip))
 			continue

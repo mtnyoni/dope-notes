@@ -56,3 +56,37 @@ renderer_clips_pixels_and_restores_nested_state :: proc(t: ^testing.T) {
 	assert(sdl.ReadSurfacePixel(result, 28, 28, &r, &g, &b, &a))
 	testing.expect_value(t, b, u8(255)) // no clip leaks to later UI
 }
+
+@(test)
+floating_caret_stays_inside_inherited_viewport_clip :: proc(t: ^testing.T) {
+	surface := sdl.CreateSurface(32, 32, .RGBA32)
+	testing.expect(t, surface != nil)
+	if surface == nil do return
+	defer sdl.DestroySurface(surface)
+	renderer := sdl.CreateSoftwareRenderer(surface)
+	testing.expect(t, renderer != nil)
+	if renderer == nil do return
+	defer sdl.DestroyRenderer(renderer)
+	assert(sdl.SetRenderDrawColor(renderer, 0, 0, 0, 255))
+	assert(sdl.RenderClear(renderer))
+	// Clay emits the floating caret as a separate root: its inherited scissor
+	// has bounds but no axis flags, unlike ordinary scroll-container scissors.
+	commands := [3]clay.RenderCommand {
+		{commandType = .ScissorStart, boundingBox = {4, 8, 16, 8}},
+		{commandType = .Rectangle, boundingBox = {6, 4, 2, 12}, renderData = {rectangle = {backgroundColor = {255, 0, 0, 255}}}},
+		{commandType = .ScissorEnd},
+	}
+	array := clay.ClayArray(clay.RenderCommand){capacity = len(commands), length = len(commands), internalArray = raw_data(commands[:])}
+	state: Clay_Renderer
+	render_clay(&state, renderer, &array, 1, 1)
+	result := sdl.RenderReadPixels(renderer, nil)
+	testing.expect(t, result != nil)
+	if result == nil do return
+	defer sdl.DestroySurface(result)
+	r, g, b, a: u8
+	assert(sdl.ReadSurfacePixel(result, 6, 5, &r, &g, &b, &a))
+	testing.expect_value(t, r, u8(0)) // caret hidden above the document viewport
+	assert(sdl.ReadSurfacePixel(result, 6, 10, &r, &g, &b, &a))
+	testing.expect_value(t, r, u8(255)) // visible caret below the toolbar
+	testing.expect(t, !sdl.RenderClipEnabled(renderer))
+}

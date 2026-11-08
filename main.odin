@@ -13,7 +13,7 @@ import ui "ui"
 import clay_ui "ui/clay"
 import sdl "vendor:sdl3"
 
-DEFAULT_WIN_W :: 1080
+DEFAULT_WIN_W :: 1320
 DEFAULT_WIN_H :: 640
 
 
@@ -192,13 +192,19 @@ main :: proc() {
 
 		clay.UpdateScrollContainers(false, {}, delta_seconds)
 		clay.BeginLayout()
-		ui.UILayout(&ui_assets, &app_state, editor_state, {
-			wheel_y = scroll_delta.y,
-			mouse = {mouse_x, mouse_y},
-			left_down = .LEFT in mouse_buttons,
-			left_pressed = left_pressed,
-			pointer_in_window = sdl.GetMouseFocus() == window,
-		}, delta_seconds)
+		ui.UILayout(
+			&ui_assets,
+			&app_state,
+			editor_state,
+			{
+				wheel_y = scroll_delta.y,
+				mouse = {mouse_x, mouse_y},
+				left_down = .LEFT in mouse_buttons,
+				left_pressed = left_pressed,
+				pointer_in_window = sdl.GetMouseFocus() == window,
+			},
+			delta_seconds,
+		)
 		commands := clay.EndLayout(delta_seconds)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)
 

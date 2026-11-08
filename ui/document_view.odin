@@ -51,7 +51,7 @@ DocumentView :: proc(ed: ^EditorState, input: ScrollInput = {}, delta_seconds: f
 		},
 		) {
 			Editor(ed, &prepared)
-			Annotations()
+			Annotations(&prepared)
 		}
 	}
 	Scrollbar(clay.ID(DOCUMENT_SCROLL_ID), &ed.scroll)
