@@ -1,6 +1,7 @@
 package main
 
 import state "./state"
+import config "./appconfig"
 import assets "assets"
 import "core:c"
 import "core:fmt"
@@ -61,7 +62,7 @@ main :: proc() {
 	context.allocator = mem.tracking_allocator(&track)
 	defer mem.tracking_allocator_destroy(&track)
 
-	_ = sdl.SetAppMetadata("Dope Notes", "0.0.0", "com.mtnyoni.dope-notes")
+	_ = sdl.SetAppMetadata(config.WINDOW_TITLE, "0.0.0", config.APPLICATION_ID)
 	if !sdl.Init(sdl.INIT_VIDEO) {
 		fmt.eprintln("SDL init failed:", sdl.GetError())
 		return
@@ -69,7 +70,7 @@ main :: proc() {
 	defer sdl.Quit()
 
 	window := sdl.CreateWindow(
-		"dope-notes",
+		config.WINDOW_TITLE,
 		DEFAULT_WIN_W,
 		DEFAULT_WIN_H,
 		{.RESIZABLE, .HIGH_PIXEL_DENSITY},
@@ -140,7 +141,7 @@ main :: proc() {
 		}
 		data_home = fmt.tprintf("%s/.local/share", home)
 	}
-	notes_dir := fmt.tprintf("%s/dope-notes/notebooks", data_home)
+	notes_dir := config.notebooks_path(data_home)
 	first_run := !os.exists(notes_dir)
 	default_notebook := fmt.tprintf("%s/Default", notes_dir)
 	if first_run {

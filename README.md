@@ -4,7 +4,11 @@ A desktop notes editor built with Odin, SDL3, Clay, and FreeType. It includes a 
 
 The focused note is saved to its Markdown file about once per second when its content changes, and also when switching notes or closing the app. Per-note cursor and scroll positions remain in memory.
 
-Notebooks are loaded at startup from `markdown/files/`. Each immediate subdirectory is a notebook; its `.md` and `.markdown` files are notes. The app selects `business planning` by default, or the first notebook if that folder is absent. The sidebar reads `title` and `description` from flat front matter, with heading/filename and first-paragraph fallbacks for plain Markdown. Notebook creation and switching controls are planned; application state already supports selecting a notebook by path.
+Notebooks are stored under `$XDG_DATA_HOME`, defaulting to `~/.local/share`. Production RPMs use `dope-notes/notebooks`; development builds use `dope-notes-dev/notebooks`. Existing notes stay in the production directory. A fresh development directory starts with its own Default notebook and welcome note.
+
+`just run`, `just build`, direct Odin builds, and `bash build.sh --debug` use development storage and display **Dope Notes (Development)** in the window title. RPMs and `bash build.sh --release` use production storage. To build production manually, pass `-define:DOPE_NOTES_DEV=false` to Odin.
+
+Each immediate subdirectory is a notebook; its `.md` and `.markdown` files are notes. New Note opens a blank note, and the sidebar follows its title and first body line as you type.
 
 ## Supported setup
 

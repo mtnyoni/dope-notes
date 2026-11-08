@@ -1,8 +1,8 @@
 run: setup-shared font-build
-    odin run . -collection:shared=./odin_shared
+    odin run . -collection:shared=./odin_shared -define:DOPE_NOTES_DEV=true
 
 build: setup-shared font-build
-    odin build . -collection:shared=./odin_shared
+    odin build . -collection:shared=./odin_shared -define:DOPE_NOTES_DEV=true
 
 package version:
     bash package-rpm.sh {{version}}

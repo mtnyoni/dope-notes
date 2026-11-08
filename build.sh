@@ -29,10 +29,10 @@ mkdir -p "$output_dir"
 
 case "$mode" in
 	--debug)
-		build_flags=(-debug)
+		build_flags=(-debug -define:DOPE_NOTES_DEV=true)
 		;;
 	--release)
-		build_flags=(-o:speed)
+		build_flags=(-o:speed -define:DOPE_NOTES_DEV=false)
 		;;
 	*)
 		echo "usage: $0 [--release|--debug]" >&2

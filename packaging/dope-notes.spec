@@ -32,6 +32,7 @@ bash font/build.sh
 mkdir -p odin_shared
 ln -sfnT ../shared/clay/bindings/odin/clay-odin odin_shared/clay
 %{odin_bin} build . \
+    -define:DOPE_NOTES_DEV=false \
     -collection:shared=./odin_shared \
     -out:dope-notes \
     -no-rpath \
