@@ -9,7 +9,7 @@ import sdl "vendor:sdl3"
 
 
 EDITOR_ID :: "Editor"
-EDITOR_FONT_SIZE :: 16
+EDITOR_FONT_SIZE :: 15
 EDITOR_LINE_HEIGHT :: 24
 EDITOR_PADDING :: 12
 CARET_WIDTH :: 2

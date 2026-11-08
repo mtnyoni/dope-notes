@@ -1,10 +1,12 @@
 package main
 
+import state "./state"
 import "buffer"
 import "core:c"
 import "core:fmt"
 import "core:mem"
 import font "font"
+import notes "notes"
 import clay "shared:clay"
 import theme "theme"
 import ui "ui"
@@ -14,9 +16,8 @@ import sdl "vendor:sdl3"
 DEFAULT_WIN_W :: 1080
 DEFAULT_WIN_H :: 640
 
+
 main :: proc() {
-
-
 	track: mem.Tracking_Allocator
 	mem.tracking_allocator_init(&track, context.allocator)
 	context.allocator = mem.tracking_allocator(&track)
@@ -79,21 +80,28 @@ main :: proc() {
 	}
 	defer clay_ui.destroy_clay_renderer(&clay_renderer)
 
-	buf := buffer.make_gap_buffer(64)
+	app_state := state.AppState {
+		current_doc = notes.notes_list[0].slug,
+	}
 
-	buffer.insert(&buf, 0, '0')
-	buffer.insert(&buf, 1, rune('1'))
-	buffer.insert(&buf, 2, "2345678")
-	buffer.insert(&buf, 0, "hello ")
-	buffer.shift_gap_to(&buf, 5)
+	note := notes.get_note_by_slug(app_state.current_doc)
+	if note == nil {
+		fmt.eprintln("Note not found:", app_state.current_doc)
+		return
+	}
 
 	editor_state := ui.EditorState {
 		face    = face,
-		buf     = buf,
-		cursor  = 5,
+		buf     = buffer.make_gap_buffer(64),
+		cursor  = 0,
 		focused = true,
 	}
 	defer buffer.destroy_gap_buffer(&editor_state.buf)
+	buffer.insert(&editor_state.buf, 0, note.title)
+	buffer.insert(&editor_state.buf, len(note.title), "\n\n")
+	buffer.insert(&editor_state.buf, len(note.title) + 2, note.content)
+	buffer.shift_gap_to(&editor_state.buf, editor_state.cursor)
+
 	if !sdl.StartTextInput(window) {
 		fmt.eprintln("Could not start text input:", sdl.GetError())
 		return
@@ -103,6 +111,7 @@ main :: proc() {
 			fmt.eprintln("Could not stop text input:", sdl.GetError())
 		}
 	}
+
 
 	running := true
 	for running {
@@ -161,7 +170,7 @@ main :: proc() {
 		}
 
 		clay.BeginLayout()
-		ui.UILayout(&editor_state)
+		ui.UILayout(&app_state, &editor_state)
 		commands := clay.EndLayout(1.0 / 60.0)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)
 

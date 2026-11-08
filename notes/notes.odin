@@ -1,16 +1,25 @@
-package ui
+package notes
 
 import "base:runtime"
 
-Article :: struct {
+Note :: struct {
 	slug:        string,
 	title:       string,
 	description: string,
 	content:     []u8,
 }
 
+get_note_by_slug :: proc(slug: string) -> ^Note {
+	for &note in notes_list {
+		if note.slug == slug {
+			return &note
+		}
+	}
+	return nil
+}
+
 // Varied lengths exercise sidebar clipping, editor wrapping, and scrolling.
-articles := [?]Article {
+notes_list := [?]Note {
 	{
 		slug = "summary",
 		title = "Summary",

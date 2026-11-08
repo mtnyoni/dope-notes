@@ -1,12 +1,18 @@
 package ui
 
+import notes "../notes"
+import state "../state"
 import theme "../theme"
 import clay "shared:clay"
+import sdl "vendor:sdl3"
 
 SIDEBAR_ITEM_TITLE_FONT_SIZE :: 13
 SIDEBAR_ITEM_DESCRIPTION_FONT_SIZE :: 12
 
-Sidebar :: proc() {
+Sidebar :: proc(app_state: state.AppState) {
+	mouse_buttons := sdl.GetMouseState(&mouse_x, &mouse_y)
+	clicked := .LEFT in mouse_buttons
+
 	if clay.UI(clay.ID("Sidebar"))(
 	{
 		layout = {
@@ -94,7 +100,7 @@ Sidebar :: proc() {
 				},
 			},
 			) {
-				for article, index in articles {
+				for article, index in notes.notes_list {
 					if clay.UI(clay.ID("ArticleCard", u32(index)))(
 					{
 						layout = {

@@ -1,10 +1,15 @@
 package ui
 
+import notes "../notes"
 import "core:c"
 import "core:testing"
 import clay "shared:clay"
 
-sidebar_test_measure :: proc "c" (text: clay.StringSlice, config: ^clay.TextElementConfig, userData: rawptr) -> clay.Dimensions {
+sidebar_test_measure :: proc "c" (
+	text: clay.StringSlice,
+	config: ^clay.TextElementConfig,
+	userData: rawptr,
+) -> clay.Dimensions {
 	return {f32(text.length) * 7, 18}
 }
 
@@ -12,14 +17,18 @@ sidebar_test_measure :: proc "c" (text: clay.StringSlice, config: ^clay.TextElem
 sidebar_description_preserves_padding :: proc(t: ^testing.T) {
 	memory := make([]u8, int(clay.MinMemorySize()))
 	defer delete(memory)
-	clay.Initialize(clay.CreateArenaWithCapacityAndMemory(c.size_t(len(memory)), raw_data(memory)), {1080, 640}, {})
+	clay.Initialize(
+		clay.CreateArenaWithCapacityAndMemory(c.size_t(len(memory)), raw_data(memory)),
+		{1080, 640},
+		{},
+	)
 	clay.SetMeasureTextFunction(sidebar_test_measure, nil)
 	clay.BeginLayout()
 	Sidebar()
 	commands := clay.EndLayout(1.0 / 60.0)
 	panel := clay.GetElementData(clay.ID("SidebarPanel")).boundingBox
 	testing.expect(t, commands.length > 0)
-	for _, index in articles {
+	for _, index in notes.notes_list {
 		card := clay.GetElementData(clay.ID("ArticleCard", u32(index))).boundingBox
 		description := clay.GetElementData(clay.ID("ArticleDescription", u32(index))).boundingBox
 		testing.expect(t, description.x >= card.x + 8)
