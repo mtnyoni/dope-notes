@@ -5,7 +5,13 @@ import state "../state"
 import theme "../theme"
 import clay "shared:clay"
 
-UILayout :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState, ed: ^EditorState) {
+UILayout :: proc(
+	ui_assets: ^assets.Manager,
+	app_state: ^state.AppState,
+	ed: ^EditorState,
+	scroll_input: ScrollInput = {},
+	delta_seconds: f32 = 1.0 / 60.0,
+) {
 	if clay.UI(clay.ID("Root"))(
 	{
 		layout = {
@@ -22,7 +28,7 @@ UILayout :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState, ed: ^Ed
 				layoutDirection = .TopToBottom,
 				padding = {0, 8, 8, 8},
 			},
-			cornerRadius = {16, 16, 16, 16},
+			cornerRadius = clay.CornerRadiusAll(16),
 		},
 		) {
 			if clay.UI(clay.ID("ContentPanel"))(
@@ -31,7 +37,7 @@ UILayout :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState, ed: ^Ed
 					sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 					layoutDirection = .TopToBottom,
 				},
-				cornerRadius = {16, 16, 16, 16},
+				cornerRadius = clay.CornerRadiusAll(16),
 				backgroundColor = theme.Light.surface,
 			},
 			) {
@@ -44,11 +50,10 @@ UILayout :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState, ed: ^Ed
 						layoutDirection = .LeftToRight,
 						padding = {8, 8, 8, 8},
 					},
-					cornerRadius = {16, 16, 16, 16},
+					cornerRadius = clay.CornerRadiusAll(16),
 				},
 				) {
-					Editor(ed)
-					Annotations()
+					DocumentView(ed, scroll_input, delta_seconds)
 				}
 			}
 		}

@@ -13,7 +13,6 @@ EditorDocuments :: struct {
 editor_open_note :: proc(documents: ^EditorDocuments, note: ^notes.Note, face: ^font.Font) -> ^EditorState {
 	if note == nil do return nil
 	if ed, found := documents.editors[note.slug]; found {
-		ed.restore_scroll = true
 		return ed
 	}
 	if documents.editors == nil do documents.editors = make(map[string]^EditorState)
@@ -23,7 +22,6 @@ editor_open_note :: proc(documents: ^EditorDocuments, note: ^notes.Note, face: ^
 		buf = buffer.make_gap_buffer(max(64, len(note.title) + 2 + len(note.content))),
 		face = face,
 		focused = true,
-		restore_scroll = true,
 		reveal_cursor = true,
 	}
 	buffer.insert(&ed.buf, 0, note.title)

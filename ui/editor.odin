@@ -13,8 +13,6 @@ EDITOR_FONT_SIZE :: 15
 EDITOR_LINE_HEIGHT :: 24
 EDITOR_PADDING :: 12
 CARET_WIDTH :: 2
-EDITOR_SCROLL_ID :: "EditorScroll"
-EDITOR_SCROLLBAR_SPACE :: 12
 
 EditorState :: struct {
 	buf:                buffer.GapBuffer,
@@ -25,8 +23,7 @@ EditorState :: struct {
 	first_visible_line: int,
 	preferred_x:        f32,
 	has_preferred_x:    bool,
-	scroll_y:           f32,
-	restore_scroll:     bool,
+	scroll:             ScrollState,
 	reveal_cursor:      bool,
 }
 
@@ -34,46 +31,29 @@ EditorLine :: struct {
 	start, end: int,
 }
 
-Editor :: proc(ed: ^EditorState) {
-	bounds := clay.GetElementData(clay.ID(EDITOR_SCROLL_ID))
+EditorTextLayout :: struct {
+	text:        string,
+	lines:       [dynamic]EditorLine,
+	cursor_line: int,
+}
+
+editor_prepare_layout :: proc(ed: ^EditorState) -> EditorTextLayout {
+	bounds := clay.GetElementData(clay.ID(EDITOR_ID))
 	if bounds.found {
-		ed.content_width = max(1, bounds.boundingBox.width - EDITOR_SCROLLBAR_SPACE - CARET_WIDTH)
+		ed.content_width = max(1, bounds.boundingBox.width - EDITOR_PADDING * 2 - CARET_WIDTH)
 	}
 	text := editor_text(ed)
 	lines := editor_lines(ed, text)
-	cursor_line := editor_cursor_line(lines[:], ed.cursor)
-	data := clay.GetScrollContainerData(clay.ID(EDITOR_SCROLL_ID))
+	return {text, lines, editor_cursor_line(lines[:], ed.cursor)}
+}
 
-	if data.found && !ed.restore_scroll {
-		ed.scroll_y = -data.scrollPosition.y
-	}
-
-	if bounds.found {
-		view_height := bounds.boundingBox.height
-		max_scroll := max(0, f32(len(lines) * EDITOR_LINE_HEIGHT) - view_height)
-		if ed.reveal_cursor {
-			caret_top := f32(cursor_line * EDITOR_LINE_HEIGHT)
-			caret_bottom := caret_top + EDITOR_LINE_HEIGHT
-			if caret_top < ed.scroll_y do ed.scroll_y = caret_top
-			if caret_bottom > ed.scroll_y + view_height do ed.scroll_y = caret_bottom - view_height
-			ed.reveal_cursor = false
-		}
-		ed.scroll_y = clamp(ed.scroll_y, 0, max_scroll)
-	}
-
-	ed.first_visible_line = int(ed.scroll_y / EDITOR_LINE_HEIGHT)
-	if data.found {
-		data.scrollPosition.y = -ed.scroll_y
-		ed.restore_scroll = false
-	}
-
+Editor :: proc(ed: ^EditorState, prepared: ^EditorTextLayout) {
 	text_cfg := clay.TextElementConfig {
 		fontId    = 0,
 		fontSize  = EDITOR_FONT_SIZE,
 		textColor = theme.Light.text,
 		wrapMode  = .None,
 	}
-
 	if clay.UI(clay.ID(EDITOR_ID))(
 	{
 		layout = {
@@ -81,59 +61,44 @@ Editor :: proc(ed: ^EditorState) {
 			layoutDirection = .TopToBottom,
 			padding = clay.PaddingAll(EDITOR_PADDING),
 		},
-		// backgroundColor = theme.Cyan_50,
 		cornerRadius = clay.CornerRadiusAll(8),
 	},
 	) {
-		if clay.UI(clay.ID(EDITOR_SCROLL_ID))(
-		{
-			layout = {
-				sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
-				layoutDirection = .TopToBottom,
-				padding = {0, EDITOR_SCROLLBAR_SPACE, 0, 0},
-			},
-			clip = {vertical = true, childOffset = {0, -ed.scroll_y}},
-		},
-		) {
-			for i in 0 ..< len(lines) {
-				line := lines[i]
-				if clay.UI(clay.ID("EditorLine", u32(i)))(
-				{
-					layout = {
-						sizing = {
-							width = clay.SizingGrow(),
-							height = clay.SizingFixed(EDITOR_LINE_HEIGHT),
-						},
+		for line, i in prepared.lines {
+			if clay.UI(clay.ID("EditorLine", u32(i)))(
+			{
+				layout = {
+					sizing = {
+						width = clay.SizingGrow(),
+						height = clay.SizingFixed(EDITOR_LINE_HEIGHT),
 					},
 				},
-				) {
-					if line.end > line.start do clay.Text(text[line.start:line.end], text_cfg)
-					if ed.focused && i == cursor_line {
-						x := editor_text_width(ed, text[line.start:ed.cursor])
-						// Floating geometry does not displace text or introduce a gap.
-						if clay.UI(clay.ID("Caret"))(
-						{
-							layout = {
-								sizing = {
-									width = clay.SizingFixed(2),
-									height = clay.SizingFixed(20),
-								},
+			},
+			) {
+				if line.end > line.start do clay.Text(prepared.text[line.start:line.end], text_cfg)
+				if ed.focused && i == prepared.cursor_line {
+					x := editor_text_width(ed, prepared.text[line.start:ed.cursor])
+					if clay.UI(clay.ID("Caret"))(
+					{
+						layout = {
+							sizing = {
+								width = clay.SizingFixed(CARET_WIDTH),
+								height = clay.SizingFixed(20),
 							},
-							floating = {
-								attachTo = .Parent,
-								offset = {x, 0},
-								zIndex = 1,
-								pointerCaptureMode = .Passthrough,
-								clipTo = .AttachedParent,
-							},
-							backgroundColor = theme.Light.text,
 						},
-						) {}
-					}
+						floating = {
+							attachTo = .Parent,
+							offset = {x, 0},
+							zIndex = 1,
+							pointerCaptureMode = .Passthrough,
+							clipTo = .AttachedParent,
+						},
+						backgroundColor = theme.Light.text,
+					},
+					) {}
 				}
 			}
 		}
-		Scrollbar(clay.ID(EDITOR_SCROLL_ID))
 	}
 }
 

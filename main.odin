@@ -111,11 +111,17 @@ main :: proc() {
 	}
 
 
+	vsync_enabled := sdl.SetRenderVSync(renderer, 1)
+	previous_frame := sdl.GetTicksNS()
 	running := true
 	for running {
 		defer free_all(context.temp_allocator)
+		now := sdl.GetTicksNS()
+		delta_seconds := clamp(f32(now - previous_frame) / 1e9, 0.001, 0.1)
+		previous_frame = now
 		e: sdl.Event
 		scroll_delta: clay.Vector2
+		left_pressed := false
 		// input: ui.Input
 
 		for sdl.PollEvent(&e) {
@@ -130,7 +136,7 @@ main :: proc() {
 				running = false
 			case .MOUSE_BUTTON_DOWN:
 				if e.button.button == sdl.BUTTON_LEFT {
-					// input.left_pressed = true
+					left_pressed = true
 				}
 
 			case .MOUSE_BUTTON_UP:
@@ -184,13 +190,19 @@ main :: proc() {
 			}
 		}
 
-		clay.UpdateScrollContainers(false, scroll_delta, 1.0 / 60.0)
+		clay.UpdateScrollContainers(false, {}, delta_seconds)
 		clay.BeginLayout()
-		ui.UILayout(&ui_assets, &app_state, editor_state)
-		commands := clay.EndLayout(1.0 / 60.0)
+		ui.UILayout(&ui_assets, &app_state, editor_state, {
+			wheel_y = scroll_delta.y,
+			mouse = {mouse_x, mouse_y},
+			left_down = .LEFT in mouse_buttons,
+			left_pressed = left_pressed,
+			pointer_in_window = sdl.GetMouseFocus() == window,
+		}, delta_seconds)
+		commands := clay.EndLayout(delta_seconds)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)
 
 		assert(sdl.RenderPresent(renderer))
-		sdl.Delay(16)
+		if !vsync_enabled do sdl.Delay(16)
 	}
 }
