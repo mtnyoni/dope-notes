@@ -3,13 +3,13 @@ package ui
 import clay "shared:clay"
 
 Editor :: proc() {
-	clay.UI(clay.ID("Sidebar"))(
+	if clay.UI(clay.ID("Editor"))(
 	{
 		layout = {
 			sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 			layoutDirection = .LeftToRight,
 		},
-		backgroundColor = {233, 22, 23, 1},
+		backgroundColor = {233, 22, 23, 255},
 	},
-	){}
+	) {}
 }

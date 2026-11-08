@@ -3,13 +3,13 @@ package ui
 import clay "shared:clay"
 
 Annotations :: proc() {
-	clay.UI(clay.ID("Sidebar"))(
+	if clay.UI(clay.ID("Annotations"))(
 	{
 		layout = {
 			sizing = {width = clay.SizingFixed(250), height = clay.SizingGrow()},
 			layoutDirection = .LeftToRight,
 		},
-		backgroundColor = {233, 22, 23, 1},
+		backgroundColor = {233, 22, 23, 255},
 	},
-	){}
+	) {}
 }
