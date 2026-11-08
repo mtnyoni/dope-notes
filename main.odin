@@ -109,11 +109,17 @@ main :: proc() {
 	for running {
 		defer free_all(context.temp_allocator)
 		e: sdl.Event
+		scroll_delta: clay.Vector2
 		// input: ui.Input
 
 		for sdl.PollEvent(&e) {
 			ui.editor_handle_event(editor_state, &e)
 			#partial switch e.type {
+			case .MOUSE_WHEEL:
+				direction: f32 = 1
+				if e.wheel.direction == .FLIPPED do direction = -1
+				scroll_delta.x += e.wheel.x * direction
+				scroll_delta.y += e.wheel.y * direction
 			case .QUIT:
 				running = false
 			case .MOUSE_BUTTON_DOWN:
@@ -172,6 +178,7 @@ main :: proc() {
 			}
 		}
 
+		clay.UpdateScrollContainers(false, scroll_delta, 1.0 / 60.0)
 		clay.BeginLayout()
 		ui.UILayout(&app_state, editor_state)
 		commands := clay.EndLayout(1.0 / 60.0)
