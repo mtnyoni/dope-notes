@@ -1,4 +1,4 @@
-package ui
+package clay_ui
 
 import font "../../font"
 import "core:c"

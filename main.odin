@@ -6,6 +6,7 @@ import "core:fmt"
 import "core:mem"
 import font "font"
 import clay "shared:clay"
+import ui "ui"
 import clay_ui "ui/clay"
 import sdl "vendor:sdl3"
 
@@ -101,6 +102,7 @@ main :: proc() {
 
 		clay.BeginLayout()
 		// login_clicked := ui.Login_Form(eye_icon, input, &login_state)
+		ui.UILayout()
 		commands := clay.EndLayout(1.0 / 60.0)
 
 		// if login_clicked {
