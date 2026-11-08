@@ -1,0 +1,3 @@
+[submodule "shared/clay"]
+	path = shared/clay
+	url = https://github.com/nicbarker/clay.git
