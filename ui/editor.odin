@@ -65,7 +65,7 @@ Editor :: proc(ed: ^EditorState) {
 			layoutDirection = .TopToBottom,
 			padding = clay.PaddingAll(EDITOR_PADDING),
 		},
-		backgroundColor = theme.Cyan_100,
+		backgroundColor = theme.Cyan_50,
 		cornerRadius = clay.CornerRadiusAll(8),
 	},
 	) {

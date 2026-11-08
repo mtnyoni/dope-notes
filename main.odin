@@ -1,7 +1,6 @@
 package main
 
 import state "./state"
-import "buffer"
 import "core:c"
 import "core:fmt"
 import "core:mem"
@@ -90,17 +89,10 @@ main :: proc() {
 		return
 	}
 
-	editor_state := ui.EditorState {
-		face    = face,
-		buf     = buffer.make_gap_buffer(64),
-		cursor  = 0,
-		focused = true,
-	}
-	defer buffer.destroy_gap_buffer(&editor_state.buf)
-	buffer.insert(&editor_state.buf, 0, note.title)
-	buffer.insert(&editor_state.buf, len(note.title), "\n\n")
-	buffer.insert(&editor_state.buf, len(note.title) + 2, note.content)
-	buffer.shift_gap_to(&editor_state.buf, editor_state.cursor)
+	documents: ui.EditorDocuments
+	defer ui.editor_close_documents(&documents)
+	editor_state := ui.editor_open_note(&documents, note, face)
+	loaded_slug := note.slug
 
 	if !sdl.StartTextInput(window) {
 		fmt.eprintln("Could not start text input:", sdl.GetError())
@@ -120,7 +112,7 @@ main :: proc() {
 		// input: ui.Input
 
 		for sdl.PollEvent(&e) {
-			ui.editor_handle_event(&editor_state, &e)
+			ui.editor_handle_event(editor_state, &e)
 			#partial switch e.type {
 			case .QUIT:
 				running = false
@@ -169,8 +161,19 @@ main :: proc() {
 			}
 		}
 
+		if app_state.current_doc != loaded_slug {
+			selected_note := notes.get_note_by_slug(app_state.current_doc)
+			if selected_note != nil {
+				editor_state = ui.editor_open_note(&documents, selected_note, face)
+				loaded_slug = selected_note.slug
+			} else {
+				fmt.eprintln("Note not found:", app_state.current_doc)
+				app_state.current_doc = loaded_slug
+			}
+		}
+
 		clay.BeginLayout()
-		ui.UILayout(&app_state, &editor_state)
+		ui.UILayout(&app_state, editor_state)
 		commands := clay.EndLayout(1.0 / 60.0)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)
 

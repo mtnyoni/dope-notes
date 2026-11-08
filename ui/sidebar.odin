@@ -4,14 +4,12 @@ import notes "../notes"
 import state "../state"
 import theme "../theme"
 import clay "shared:clay"
-import sdl "vendor:sdl3"
 
 SIDEBAR_ITEM_TITLE_FONT_SIZE :: 13
 SIDEBAR_ITEM_DESCRIPTION_FONT_SIZE :: 12
 
-Sidebar :: proc(app_state: state.AppState) {
-	mouse_buttons := sdl.GetMouseState(&mouse_x, &mouse_y)
-	clicked := .LEFT in mouse_buttons
+Sidebar :: proc(app_state: ^state.AppState) {
+	clicked := clay.GetPointerState().state == .PressedThisFrame
 
 	if clay.UI(clay.ID("Sidebar"))(
 	{
@@ -109,10 +107,14 @@ Sidebar :: proc(app_state: state.AppState) {
 							padding = {12, 12, 12, 12},
 							childGap = 4,
 						},
-						backgroundColor = clay.Hovered() ? theme.Cyan_100 : theme.White,
+						backgroundColor = app_state.current_doc == article.slug ? theme.Cyan_200 : (clay.Hovered() ? theme.Cyan_100 : theme.White),
 						cornerRadius = {8, 8, 8, 8},
 					},
 					) {
+						if clicked && clay.Hovered() {
+							app_state.current_doc = article.slug
+						}
+
 						if clay.UI(clay.ID("ArticleTitle", u32(index)))(
 						{
 							layout = {
