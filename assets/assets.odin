@@ -1,6 +1,7 @@
 package assets
 
 import "core:fmt"
+import "core:strings"
 import sdl "vendor:sdl3"
 import img "vendor:sdl3/image"
 
@@ -49,6 +50,10 @@ load :: proc(renderer: ^sdl.Renderer) -> (manager: Manager, ok: bool) {
 	if manager.app_icon == nil do manager.app_icon = img.LoadTexture(renderer, "packaging/icons/dope-notes.png")
 	for path, icon in ICON_PATHS {
 		texture := img.LoadTexture(renderer, path)
+		if texture == nil {
+			installed_path := fmt.tprintf("/usr/share/dope-notes/%s", path)
+			texture = img.LoadTexture(renderer, strings.clone_to_cstring(installed_path, context.temp_allocator))
+		}
 		if texture == nil {
 			fmt.eprintln("Image load failed:", path, sdl.GetError())
 			destroy(&manager)

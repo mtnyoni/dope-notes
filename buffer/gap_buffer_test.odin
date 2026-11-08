@@ -8,7 +8,7 @@ test_left_right_values :: proc(t: ^testing.T) {
 	buf := make_gap_buffer(2)
 	defer destroy_gap_buffer(&buf)
 
-	insert(&buf, 0, '0')
+	insert(&buf, 0, u8('0'))
 	insert(&buf, 1, rune('1'))
 	insert(&buf, 2, "2345678")
 	insert(&buf, 0, rune('a'))

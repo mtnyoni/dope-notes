@@ -105,9 +105,10 @@ main :: proc() {
 	clayArena := clay.CreateArenaWithCapacityAndMemory(minMemorySize, memory)
 	clay.Initialize(clayArena, {f32(width), f32(height)}, {handler = clay_ui.errorHandler})
 
-	face := font.open("font/Roboto-Regular.ttf")
+	face := font.open("/usr/share/dope-notes/font/Roboto-Regular.ttf")
+	if face == nil do face = font.open("font/Roboto-Regular.ttf")
 	if face == nil {
-		fmt.eprintln("Could not load ui/font/Roboto-Regular.ttf")
+		fmt.eprintln("Could not load Dope Notes font")
 		return
 	}
 	defer font.close(face)

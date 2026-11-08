@@ -6,10 +6,6 @@ project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 build_dir="$project_dir/build"
 package_dir="$build_dir/packages"
 source_dir="$build_dir/sources"
-odin_version="dev-2026-07a"
-odin_archive="Odin-$odin_version.tar.gz"
-odin_url="https://github.com/odin-lang/Odin/archive/$odin_version/$odin_archive"
-odin_sha256="8f4f02fd9a3426b441cd0dfbe0aca1b95fd93c95d86940fcb4417ef6044c83cd"
 
 source_only=false
 if [[ "${1:-}" == "--source-only" ]]; then
@@ -39,7 +35,7 @@ if [[ "$(uname -m)" != "x86_64" ]]; then
 	exit 1
 fi
 
-for command_name in curl git rpmbuild sha256sum tar; do
+for command_name in git rpmbuild tar; do
 	if ! command -v "$command_name" >/dev/null 2>&1; then
 		echo "error: $command_name is required" >&2
 		if [[ "$command_name" == "rpmbuild" ]] && command -v dnf >/dev/null 2>&1; then
@@ -56,12 +52,10 @@ fi
 
 mkdir -p "$build_dir" "$package_dir" "$source_dir"
 
-odin_path="$source_dir/$odin_archive"
-if [[ ! -f "$odin_path" ]] || ! printf '%s  %s\n' "$odin_sha256" "$odin_path" | sha256sum --check --status; then
-	download_path="$odin_path.download"
-	curl --fail --location --output "$download_path" "$odin_url"
-	printf '%s  %s\n' "$odin_sha256" "$download_path" | sha256sum --check --status
-	mv -f "$download_path" "$odin_path"
+odin_bin="$(command -v odin || true)"
+if ! $source_only && [[ -z "$odin_bin" ]]; then
+	echo "error: odin is required on PATH for a binary RPM build" >&2
+	exit 1
 fi
 
 source_archive="$source_dir/dope-notes-$version.tar.gz"
@@ -102,7 +96,6 @@ mkdir -p \
 	"$rpm_topdir/SRPMS"
 
 install -m0644 "$source_archive" "$rpm_topdir/SOURCES/"
-install -m0644 "$odin_path" "$rpm_topdir/SOURCES/"
 install -m0644 "$project_dir/packaging/dope-notes.spec" "$rpm_topdir/SPECS/dope-notes.spec"
 sed -i \
 	-e "s/^%{!?dope_notes_version:.*$/%global dope_notes_version $version/" \
@@ -120,8 +113,10 @@ fi
 
 rpmbuild \
 	--define "_topdir $rpm_topdir" \
+	--define "_tmppath /tmp" \
 	--define "dope_notes_version $version" \
 	--define "dope_notes_release $release" \
+	--define "odin_bin ${odin_bin:-odin}" \
 	"$rpmbuild_mode" "$rpm_topdir/SPECS/dope-notes.spec"
 
 mapfile -t built_packages < <(
