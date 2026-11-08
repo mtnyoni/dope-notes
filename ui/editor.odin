@@ -17,12 +17,9 @@ EDITOR_LINE_HEIGHT :: 24
 EDITOR_PADDING :: 12
 CARET_WIDTH :: 2
 
-EditorViewMode :: enum { Source, Preview }
-
 EditorState :: struct {
-	view_mode: EditorViewMode,
-	preview_ast: ^commonmark.Node,
-	preview_dirty: bool,
+	markdown_ast: ^commonmark.Node,
+	markdown_dirty: bool,
 	buf:                buffer.GapBuffer,
 	cursor:             buffer.BufferPosition,
 	focused:            bool,
@@ -44,7 +41,8 @@ EditorTextLayout :: struct {
 	lines:       [dynamic]EditorLine,
 	cursor_line: int,
 	height: f32,
-	preview: markdown.DocumentLayout,
+	rendered: markdown.DocumentLayout,
+	caret_top: f32,
 }
 
 editor_prepare_layout :: proc(ed: ^EditorState) -> EditorTextLayout {
@@ -58,74 +56,41 @@ editor_prepare_layout :: proc(ed: ^EditorState) -> EditorTextLayout {
 		text = text, lines = lines, cursor_line = editor_cursor_line(lines[:], ed.cursor),
 		height = f32(len(lines) * EDITOR_LINE_HEIGHT + EDITOR_PADDING * 2),
 	}
-	if ed.view_mode == .Preview {
-		if ed.preview_ast == nil || ed.preview_dirty {
-			if ed.preview_ast != nil do commonmark.node_free(ed.preview_ast)
-			ed.preview_ast = commonmark.parse_document_from_string(text, {.Validate_UTF8})
-			ed.preview_dirty = false
+	if ed.markdown_ast == nil || ed.markdown_dirty {
+		if ed.markdown_ast != nil do commonmark.node_free(ed.markdown_ast)
+		ed.markdown_ast = commonmark.parse_document_from_string(text, {.Validate_UTF8})
+		ed.markdown_dirty = false
+	}
+	active_line := -1
+	if ed.focused do active_line = editor_physical_line(text, ed.cursor)
+	prepared.rendered = markdown.prepare_live_markdown_layout(ed.markdown_ast, editor_markdown_options(ed), text, active_line)
+	prepared.height = prepared.rendered.height + EDITOR_PADDING * 2
+	prepared.caret_top = -1
+	y: f32
+	for block in prepared.rendered.blocks {
+		if block.active {
+			for row, index in block.lines {
+				last := index == len(block.lines) - 1
+				if ed.cursor >= row.source_start && (ed.cursor < row.source_end || (last && ed.cursor == row.source_end)) {
+					prepared.caret_top = y + block.top_padding + f32(index) * block.line_height
+				}
+			}
 		}
-		prepared.preview = markdown.prepare_markdown_layout(ed.preview_ast, editor_markdown_options(ed))
-		prepared.height = prepared.preview.height + EDITOR_PADDING * 2
+		y += block.height
 	}
 	return prepared
 }
 
 Editor :: proc(ed: ^EditorState, prepared: ^EditorTextLayout) {
-	text_cfg := clay.TextElementConfig {
-		fontId    = 0,
-		fontSize  = EDITOR_FONT_SIZE,
-		textColor = theme.Light.text,
-		wrapMode  = .None,
-	}
-	if clay.UI(clay.ID(EDITOR_ID))(
-	{
+	if clay.UI(clay.ID(EDITOR_ID))({
 		layout = {
 			sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 			layoutDirection = .TopToBottom,
 			padding = clay.PaddingAll(EDITOR_PADDING),
 		},
 		cornerRadius = clay.CornerRadiusAll(8),
-	},
-	) {
-		if ed.view_mode == .Preview {
-			markdown.render_markdown_ast_to_clay(ed.preview_ast, editor_markdown_options(ed), &prepared.preview)
-		} else {
-			for line, i in prepared.lines {
-				if clay.UI(clay.ID("EditorLine", u32(i)))(
-				{
-					layout = {
-						sizing = {
-							width = clay.SizingGrow(),
-							height = clay.SizingFixed(EDITOR_LINE_HEIGHT),
-						},
-					},
-				},
-				) {
-					if line.end > line.start do clay.Text(prepared.text[line.start:line.end], text_cfg)
-					if ed.focused && i == prepared.cursor_line {
-						x := editor_text_width(ed, prepared.text[line.start:ed.cursor])
-						if clay.UI(clay.ID("Caret"))(
-						{
-							layout = {
-								sizing = {
-									width = clay.SizingFixed(CARET_WIDTH),
-									height = clay.SizingFixed(20),
-								},
-							},
-							floating = {
-								attachTo = .Parent,
-								offset = {x, 0},
-								zIndex = 1,
-								pointerCaptureMode = .Passthrough,
-								clipTo = .AttachedParent,
-							},
-							backgroundColor = theme.Light.text,
-						},
-						) {}
-					}
-				}
-			}
-		}
+	}) {
+		markdown.render_markdown_ast_to_clay(ed.markdown_ast, editor_markdown_options(ed), &prepared.rendered)
 	}
 }
 
@@ -157,7 +122,11 @@ editor_move_vertical :: proc(ed: ^EditorState, direction: int) {
 }
 
 editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
-	if !ed.focused || ed.view_mode == .Preview do return
+	if e.type == .MOUSE_BUTTON_DOWN && e.button.button == sdl.BUTTON_LEFT {
+		editor_pick_cursor(ed, {e.button.x, e.button.y})
+		return
+	}
+	if !ed.focused do return
 	buf := &ed.buf
 	vertical := false
 
@@ -166,27 +135,27 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 		s := string(e.text.text)
 		buffer.insert(buf, ed.cursor, s)
 		ed.cursor += len(s)
-		ed.preview_dirty = true
+		ed.markdown_dirty = true
 
 	case .KEY_DOWN:
 		switch e.key.key {
 		case sdl.K_RETURN, sdl.K_KP_ENTER:
 			buffer.insert(buf, ed.cursor, "\n")
 			ed.cursor += 1
-			ed.preview_dirty = true
+			ed.markdown_dirty = true
 
 		case sdl.K_BACKSPACE:
 			if ed.cursor > 0 {
 				p := buffer.prev_rune_start(buf, ed.cursor)
 				buffer.remove(buf, p, ed.cursor - p)
 				ed.cursor = p
-				ed.preview_dirty = true
+				ed.markdown_dirty = true
 			}
 
 		case sdl.K_DELETE:
 			n := buffer.next_rune_end(buf, ed.cursor) - ed.cursor
 			buffer.remove(buf, ed.cursor, n)
-			if n > 0 do ed.preview_dirty = true
+			if n > 0 do ed.markdown_dirty = true
 
 		case sdl.K_LEFT:
 			ed.cursor = buffer.prev_rune_start(buf, ed.cursor)
@@ -194,6 +163,14 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 		case sdl.K_RIGHT:
 			ed.cursor = buffer.next_rune_end(buf, ed.cursor)
 
+		case sdl.K_HOME:
+			text := editor_text(ed)
+			rows := markdown.source_lines(text)
+			ed.cursor = rows[editor_physical_line(text, ed.cursor)].start
+		case sdl.K_END:
+			text := editor_text(ed)
+			rows := markdown.source_lines(text)
+			ed.cursor = rows[editor_physical_line(text, ed.cursor)].end
 		case sdl.K_UP:
 			editor_move_vertical(ed, -1)
 			vertical = true
@@ -275,13 +252,73 @@ editor_cursor_line :: proc(lines: []EditorLine, cursor: int) -> int {
 }
 
 editor_markdown_options :: proc(ed: ^EditorState) -> markdown.RenderOptions {
-	return {width = ed.content_width > 0 ? ed.content_width : 400, measure = clay_ui.measure_text, user_data = ed.face}
+	return {width = ed.content_width > 0 ? ed.content_width : 400, measure = ed.face != nil ? clay_ui.measure_text : nil, user_data = ed.face, cursor = ed.cursor, show_caret = ed.focused}
 }
 
-editor_toggle_preview :: proc(ed: ^EditorState) {
-	ed.view_mode = ed.view_mode == .Preview ? .Source : .Preview
-	ed.focused = ed.view_mode == .Source
-	ed.reveal_cursor = ed.focused
-	ed.scroll.offset = 0
-	ed.scroll.target = 0
+editor_physical_line :: proc(text: string, cursor: int) -> int {
+	index := 0
+	for i in 0 ..< min(cursor, len(text)) {
+		if text[i] == '\n' do index += 1
+	}
+	return index
+}
+
+editor_pick_cursor :: proc(ed: ^EditorState, mouse: clay.Vector2) {
+	viewport := clay.GetElementData(clay.ID(DOCUMENT_SCROLL_ID))
+	bounds := clay.GetElementData(clay.ID(EDITOR_ID))
+	if !viewport.found || !bounds.found || !scroll_contains(viewport.boundingBox, mouse) || !scroll_contains(bounds.boundingBox, mouse) do return
+	prepared := editor_prepare_layout(ed)
+	rows := markdown.source_lines(prepared.text)
+	y := mouse.y - bounds.boundingBox.y - EDITOR_PADDING
+	x := mouse.x - bounds.boundingBox.x - EDITOR_PADDING
+	top: f32
+	position := len(prepared.text)
+	for block in prepared.rendered.blocks {
+		if y < top + block.height {
+			source_row := rows[clamp(block.source_line - 1, 0, len(rows) - 1)]
+			position = source_row.start
+			blank_gap := false
+			if block.node != nil && block.spacing > 0 && y >= top + block.height - block.spacing {
+				next_index := int(commonmark.node_get_end_line(block.node))
+				if next_index < len(rows) && rows[next_index].start == rows[next_index].end {
+					position = rows[next_index].start
+					blank_gap = true
+				}
+			}
+			if !blank_gap && len(block.lines) > 0 {
+				index := clamp(int((y - top - block.top_padding) / block.line_height), 0, len(block.lines) - 1)
+				remaining := x - block.indent - block.padding - (block.quote ? 10 : 0) - (len(block.marker) > 0 ? 24 : 0)
+				position = source_row.end
+				for span in block.lines[index].spans {
+					width := markdown.span_width(span, block.font_size, editor_markdown_options(ed))
+					if remaining <= width {
+						best, at := 0, 0
+						distance := abs(remaining)
+						for at < len(span.text) {
+							at = editor_next_boundary(span.text, at)
+							prefix := span
+							prefix.text = span.text[:at]
+							w := markdown.span_width(prefix, block.font_size, editor_markdown_options(ed))
+							if abs(w - remaining) < distance {
+								best = at
+								distance = abs(w - remaining)
+							}
+						}
+						position = clamp(source_row.start + max(0, span.source_column - 1) + best, source_row.start, source_row.end)
+						break
+					}
+					remaining -= width
+				}
+			}
+			break
+		}
+		top += block.height
+	}
+	// Never place the cursor inside a UTF-8 continuation sequence.
+	for position > 0 && position < len(prepared.text) && (prepared.text[position] & 0xC0) == 0x80 do position -= 1
+	ed.cursor = position
+	ed.focused = true
+	ed.has_preferred_x = false
+	ed.reveal_cursor = true
+	buffer.shift_gap_to(&ed.buf, ed.cursor)
 }

@@ -7,7 +7,7 @@ import clay "shared:clay"
 TOOLBAR_HEIGHT :: 54
 TOOLBAR_BUTTON_SIZE :: 32
 
-EditorToolBar :: proc(ui_assets: ^assets.Manager, ed: ^EditorState = nil) {
+EditorToolBar :: proc(ui_assets: ^assets.Manager) {
 	if clay.UI(clay.ID("EditorToolbar"))(
 	{
 		layout = {
@@ -24,7 +24,7 @@ EditorToolBar :: proc(ui_assets: ^assets.Manager, ed: ^EditorState = nil) {
 		{
 			layout = {
 				sizing = {
-					width = clay.SizingFixed(ed != nil ? 132 : 64),
+					width = clay.SizingFixed(64),
 					height = clay.SizingFixed(TOOLBAR_BUTTON_SIZE),
 				},
 				layoutDirection = .LeftToRight,
@@ -33,16 +33,6 @@ EditorToolBar :: proc(ui_assets: ^assets.Manager, ed: ^EditorState = nil) {
 		) {
 			ToolbarIconButton(ui_assets, .Undo)
 			ToolbarIconButton(ui_assets, .Redo)
-			if ed != nil {
-				if clay.UI(clay.ID("EditorViewToggle"))({
-					layout = {sizing = {width = clay.SizingFixed(68), height = clay.SizingFixed(TOOLBAR_BUTTON_SIZE)}, childAlignment = {x = .Center, y = .Center}},
-					backgroundColor = clay.Hovered() ? theme.Gray_100 : theme.Gray_50,
-					cornerRadius = clay.CornerRadiusAll(6),
-				}) {
-					clay.Text(ed.view_mode == .Preview ? "Edit" : "Preview", {fontSize = 12, textColor = theme.Gray_700, wrapMode = .None})
-					if clay.Hovered() && clay.GetPointerState().state == .PressedThisFrame do editor_toggle_preview(ed)
-				}
-			}
 		}
 		ToolbarSpacer()
 		if clay.UI(clay.ID("ToolbarFormatting"))(
@@ -96,7 +86,7 @@ EditorToolBar :: proc(ui_assets: ^assets.Manager, ed: ^EditorState = nil) {
 		{
 			layout = {
 				sizing = {
-					width = clay.SizingFixed(ed != nil ? 132 : 64),
+					width = clay.SizingFixed(64),
 					height = clay.SizingFixed(TOOLBAR_BUTTON_SIZE),
 				},
 				childAlignment = {x = .Right, y = .Center},

@@ -2,7 +2,7 @@
 
 A desktop notes editor built with Odin, SDL3, Clay, and FreeType. It includes a gap-buffer editor, note selection, Unicode text input, line wrapping, and mouse-wheel scrolling.
 
-Edits and per-note cursor/scroll positions are currently kept in memory. Changes are not saved to disk yet.
+The focused note is saved to its Markdown file about once per second when its content changes, and also when switching notes or closing the app. Per-note cursor and scroll positions remain in memory.
 
 Notebooks are loaded at startup from `markdown/files/`. Each immediate subdirectory is a notebook; its `.md` and `.markdown` files are notes. The app selects `business planning` by default, or the first notebook if that folder is absent. The sidebar reads `title` and `description` from flat front matter, with heading/filename and first-paragraph fallbacks for plain Markdown. Notebook creation and switching controls are planned; application state already supports selecting a notebook by path.
 
@@ -177,9 +177,9 @@ The checked-in `ols.json` contains a developer-specific absolute path. Replace i
 
 Inside WSL, use the Linux path, not a `C:\\...` path. Run `just setup-shared` and restart OLS after editing the configuration. `ols.json` configures the language server; terminal compiler commands still need the collection flag.
 
-## Markdown preview
+## Live Markdown editing
 
-Notes open in a formatted CommonMark preview. Use **Edit** in the toolbar to edit the Markdown source, and **Preview** to render the updated buffer. Preview supports headings, paragraphs, bold and italic text, lists, quotes, code blocks, rules, and styled link labels. The source buffer and per-note edits remain in memory when switching views.
+The source line containing the cursor is editable and displays its Markdown markers. Other lines render through CommonMark with headings, paragraphs, bold and italic text, lists, quotes, code blocks, rules, and styled link labels. Click rendered text or use the arrow keys to move the cursor; the previous line returns to formatted rendering automatically. There is no separate Edit/Preview mode. Per-note edits remain in memory when switching notes.
 
 The renderer uses Odin's `vendor:commonmark` binding, which links `libcmark` on Linux. Install it before building:
 

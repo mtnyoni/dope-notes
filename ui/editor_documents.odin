@@ -22,10 +22,9 @@ editor_open_note :: proc(documents: ^EditorDocuments, note: ^markdown.NoteFile, 
 	ed^ = EditorState {
 		buf = buffer.make_gap_buffer(max(64, len(note.content))),
 		face = face,
-		focused = false,
-		view_mode = .Preview,
-		preview_dirty = true,
-		reveal_cursor = false,
+		focused = true,
+		markdown_dirty = true,
+		reveal_cursor = true,
 	}
 	buffer.insert(&ed.buf, 0, note.content)
 	buffer.shift_gap_to(&ed.buf, 0)
@@ -43,7 +42,7 @@ editor_close_documents :: proc(documents: ^EditorDocuments) {
 }
 
 editor_destroy_state :: proc(ed: ^EditorState) {
-	if ed.preview_ast != nil do commonmark.node_free(ed.preview_ast)
+	if ed.markdown_ast != nil do commonmark.node_free(ed.markdown_ast)
 	buffer.destroy_gap_buffer(&ed.buf)
 	ed^ = {}
 }

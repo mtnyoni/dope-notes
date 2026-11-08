@@ -5,6 +5,8 @@ import assets "assets"
 import "core:c"
 import "core:fmt"
 import "core:mem"
+import "core:os"
+import "core:strings"
 import font "font"
 import markdown "markdown"
 import buffer "buffer"
@@ -16,6 +18,40 @@ import sdl "vendor:sdl3"
 
 DEFAULT_WIN_W :: 1320
 DEFAULT_WIN_H :: 640
+
+Save_Ticker :: struct {
+	mutex: ^sdl.Mutex,
+	running: bool,
+	pending: bool,
+}
+
+save_tick :: proc "c" (data: rawptr) -> c.int {
+	ticker := cast(^Save_Ticker)data
+	for {
+		sdl.Delay(1000)
+		sdl.LockMutex(ticker.mutex)
+		if !ticker.running {
+			sdl.UnlockMutex(ticker.mutex)
+			break
+		}
+		ticker.pending = true
+		sdl.UnlockMutex(ticker.mutex)
+	}
+	return 0
+}
+
+save_focused_note :: proc(ed: ^ui.EditorState, path: string, last_saved: ^string) {
+	if path == "" || ed == nil do return
+	left, right := buffer.get_strings(&ed.buf)
+	content := fmt.tprintf("%s%s", left, right)
+	if content == last_saved^ do return
+	if err := os.write_entire_file(path, content); err != nil {
+		fmt.eprintln("Could not save note:", path, err)
+		return
+	}
+	delete(last_saved^)
+	last_saved^ = strings.clone(content)
+}
 
 
 main :: proc() {
@@ -103,6 +139,21 @@ main :: proc() {
 		editor_state = ui.editor_open_note(&documents, note, face)
 	}
 	loaded_doc := app_state.current_doc
+	last_saved := ""
+	if note := state.current_note(&app_state); note != nil do last_saved = strings.clone(string(note.content))
+	defer delete(last_saved)
+	ticker := Save_Ticker{mutex = sdl.CreateMutex(), running = true}
+	assert(ticker.mutex != nil)
+	defer sdl.DestroyMutex(ticker.mutex)
+	thread := sdl.CreateThread(save_tick, "note-save-ticker", &ticker)
+	assert(thread != nil)
+	defer {
+		sdl.LockMutex(ticker.mutex)
+		ticker.running = false
+		sdl.UnlockMutex(ticker.mutex)
+		sdl.WaitThread(thread, nil)
+		save_focused_note(editor_state, loaded_doc, &last_saved)
+	}
 
 	if !sdl.StartTextInput(window) {
 		fmt.eprintln("Could not start text input:", sdl.GetError())
@@ -120,6 +171,11 @@ main :: proc() {
 	running := true
 	for running {
 		defer free_all(context.temp_allocator)
+		sdl.LockMutex(ticker.mutex)
+		save_due := ticker.pending
+		ticker.pending = false
+		sdl.UnlockMutex(ticker.mutex)
+		if save_due do save_focused_note(editor_state, loaded_doc, &last_saved)
 		now := sdl.GetTicksNS()
 		delta_seconds := clamp(f32(now - previous_frame) / 1e9, 0.001, 0.1)
 		previous_frame = now
@@ -184,10 +240,13 @@ main :: proc() {
 		}
 
 		if app_state.current_doc != loaded_doc {
+			save_focused_note(editor_state, loaded_doc, &last_saved)
 			selected_note := state.current_note(&app_state)
 			if selected_note != nil {
 				editor_state = ui.editor_open_note(&documents, selected_note, face)
 				loaded_doc = selected_note.path
+				delete(last_saved)
+				last_saved = strings.clone(string(selected_note.content))
 			} else if app_state.current_doc == "" {
 				editor_state = &empty_editor
 				loaded_doc = ""

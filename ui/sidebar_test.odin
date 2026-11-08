@@ -75,6 +75,6 @@ sidebar_description_preserves_padding :: proc(t: ^testing.T) {
 	commands = clay.EndLayout(1.0 / 60.0)
 	testing.expect_value(t, app_state.current_doc, notebook.notes[1].path)
 	editor_mouse_scrolling_test(t)
-	editor_markdown_preview_test(t)
+	editor_live_markdown_test(t)
 
 }

@@ -41,7 +41,7 @@ UILayout :: proc(
 				backgroundColor = theme.Light.surface,
 			},
 			) {
-				EditorToolBar(ui_assets, ed)
+				EditorToolBar(ui_assets)
 
 				if clay.UI()(
 				{
