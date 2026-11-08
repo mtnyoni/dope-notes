@@ -1,0 +1,34 @@
+---
+config:
+  c4:
+    wrap: true
+    c4ShapeMargin: 150
+    boxMargin: 30
+---
+C4Container
+    title Dope Notes — containers
+
+    Person(user, "User", "Creates, organizes, and searches notes")
+
+    System_Boundary(app, "Dope Notes") {
+        Container(desktop, "Notes app", "SDL3 desktop app", "Creates and organizes notes")
+        ContainerDb(db, "Notes DB", "SQLite", "Stores note metadata")
+        ContainerDb(files, "Notes files", "Markdown files", "Stores note content")
+    }
+
+    System_Ext(llm, "LLM API", "Provides text explanations")
+    System_Ext(github, "GitHub", "Remote note storage")
+
+    Rel_R(user, desktop, "Manages notes")
+    Rel_R(desktop, db, "Reads and writes note metadata", "SQL")
+    Rel_D(desktop, files, "Reads and writes note content")
+    Rel_R(desktop, llm, "Requests explanations", "HTTPS")
+    Rel_R(desktop, github, "Synchronizes notes", "Git over HTTPS")
+
+    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
+
+    UpdateRelStyle(user, desktop, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(desktop, db, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(desktop, files, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(desktop, llm, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(desktop, github, $lineColor="#94A3B8", $textColor="#374151")

@@ -1,0 +1,25 @@
+---
+config:
+  c4:
+    wrap: true
+    c4ShapeMargin: 150
+    boxMargin: 30
+---
+
+C4Context
+    title Dope Notes — system context
+
+    Person(user, "User", "Creates, organizes, and searches notes")
+    System(app, "Dope Notes", "Creates and organizes notes")
+    System_Ext(llm, "LLM API", "Provides text explanations")
+    System_Ext(github, "GitHub", "Remote note storage")
+
+    Rel(user, app, "Manages notes")
+    Rel(app, llm, "Requests explanations", "HTTPS")
+    Rel(app, github, "Synchronizes notes", "Git over HTTPS")
+
+    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
+
+    UpdateRelStyle(user, app, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(app, llm, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(app, github, $lineColor="#94A3B8", $textColor="#374151")

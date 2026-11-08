@@ -1,0 +1,55 @@
+---
+config:
+  c4:
+    wrap: true
+    c4ShapeMargin: 180
+    boxMargin: 30
+---
+C4Component
+    title Dope Notes — desktop app components
+
+    Person(user, "User", "Creates, organizes, and searches notes")
+    System_Ext(llm, "LLM API", "Provides text explanations")
+    System_Ext(github, "GitHub", "Remote note storage")
+    ContainerDb(files, "Notes files", "Markdown files", "Stores note content")
+    ContainerDb(db, "Notes DB", "SQLite", "Stores note metadata")
+
+    Container_Boundary(app, "Notes app") {
+        Component(editor, "Editor", "SDL3", "Creates and edits notes")
+        Component(notes, "Note manager", "", "Manages note content")
+        Component(notebooks, "Notebook manager", "", "Organizes notes into notebooks")
+        Component(repository, "Note repository", "", "Reads and writes notes and metadata")
+        Component(annotations, "Annotation engine", "", "Requests explanations for selected text")
+        Component(search, "Search", "", "Finds notes")
+        Component(sync, "Sync engine", "", "Synchronizes notes")
+    }
+
+    Rel(user, editor, "Creates and edits notes")
+    Rel(user, notebooks, "Organizes notes")
+    Rel(user, search, "Searches notes")
+    Rel(editor, notes, "Saves and loads")
+    Rel(editor, annotations, "Requests annotations")
+    Rel(notes, repository, "Reads and writes")
+    Rel(notebooks, repository, "Reads and writes")
+    Rel(search, repository, "Queries notes")
+    Rel(sync, repository, "Reads and applies changes")
+    Rel(annotations, llm, "Requests explanations", "HTTPS")
+    Rel(repository, files, "Reads and writes note content")
+    Rel(repository, db, "Reads and writes metadata", "SQL")
+    Rel(sync, github, "Synchronizes notes", "Git over HTTPS")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
+
+    UpdateRelStyle(user, editor, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(user, notebooks, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(user, search, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(editor, notes, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(editor, annotations, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(notes, repository, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(notebooks, repository, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(search, repository, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(sync, repository, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(annotations, llm, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(repository, files, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(repository, db, $lineColor="#94A3B8", $textColor="#374151")
+    UpdateRelStyle(sync, github, $lineColor="#94A3B8", $textColor="#374151")

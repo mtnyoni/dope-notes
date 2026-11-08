@@ -1,0 +1,17 @@
+usecase-beta
+    actor User as user
+    actor "Sync server" as server
+
+    rectangle "Dope notes app (notebooks)" {
+        usecase "Add notebook" as add
+        usecase "Delete notebook" as delete
+        usecase "Update notebook" as update
+        usecase "Save notebook" as save
+        usecase "Sync notebook" as sync
+    }
+
+    user --> add
+    user --> delete
+    user --> update
+    update ..> save : <<include>>
+    server --> sync
