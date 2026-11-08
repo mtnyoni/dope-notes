@@ -3,7 +3,7 @@ package ui
 import "core:c"
 import "core:math"
 import "core:strings"
-import clay "shared/clay/bindings/odin/clay-odin"
+import clay "shared:clay"
 import font "ui/font"
 import sdl "vendor:sdl3"
 
