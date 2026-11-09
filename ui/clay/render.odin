@@ -135,8 +135,8 @@ render_clay :: proc(
 				assert(sdl.RenderFillRect(renderer, &rect))
 			} else {
 				key := Mask_Key{i32(rect.w), i32(rect.h), radius, {}, false}
-				texture := get_mask(state, renderer, key)
-				draw_tinted(renderer, texture, rect, data.backgroundColor)
+				texture, slice := get_sliced_mask(state, renderer, key)
+				draw_tinted_mask(renderer, texture, rect, data.backgroundColor, slice)
 			}
 		case .Border:
 			data := command.renderData.border
@@ -152,8 +152,8 @@ render_clay :: proc(
 				},
 				is_border    = true,
 			}
-			texture := get_mask(state, renderer, key)
-			draw_tinted(renderer, texture, rect, data.color)
+			texture, slice := get_sliced_mask(state, renderer, key)
+			draw_tinted_mask(renderer, texture, rect, data.color, slice)
 		case .Text:
 			data := command.renderData.text
 			label := string(data.stringContents.chars[:data.stringContents.length])
@@ -263,6 +263,32 @@ inside_rounded :: proc(x, y: f32, width, height: f32, radii: [4]f32) -> bool {
 	if x < bl && y >= height - bl do return (x - bl) * (x - bl) + (y - (height - bl)) * (y - (height - bl)) <= bl * bl
 	if x >= width - br && y >= height - br do return (x - (width - br)) * (x - (width - br)) + (y - (height - br)) * (y - (height - br)) <= br * br
 	return true
+}
+
+get_sliced_mask :: proc(state: ^Clay_Renderer, renderer: ^sdl.Renderer, key: Mask_Key) -> (texture: ^sdl.Texture, slice: f32) {
+	corner: f32 = 1
+	for radius in key.radius do corner = max(corner, radius)
+	for border in key.border_width do corner = max(corner, border)
+	corner = math.ceil(corner) + 1
+	// Keep small masks pixel exact. Large masks share a compact nine-grid texture.
+	if f32(key.width) > corner * 2 + 2 && f32(key.height) > corner * 2 + 2 {
+		mask_key := key
+		mask_key.width = i32(corner * 2 + 2)
+		mask_key.height = i32(corner * 2 + 2)
+		return get_mask(state, renderer, mask_key), corner
+	}
+	return get_mask(state, renderer, key), 0
+}
+
+draw_tinted_mask :: proc(renderer: ^sdl.Renderer, texture: ^sdl.Texture, dst: sdl.FRect, color: clay.Color, slice: f32) {
+	assert(sdl.SetTextureColorMod(texture, u8(color[0]), u8(color[1]), u8(color[2])))
+	assert(sdl.SetTextureAlphaMod(texture, u8(color[3])))
+	target := dst
+	if slice > 0 {
+		assert(sdl.RenderTexture9Grid(renderer, texture, nil, slice, slice, slice, slice, 1, &target))
+	} else {
+		assert(sdl.RenderTexture(renderer, texture, nil, &target))
+	}
 }
 
 get_mask :: proc(state: ^Clay_Renderer, renderer: ^sdl.Renderer, key: Mask_Key) -> ^sdl.Texture {
