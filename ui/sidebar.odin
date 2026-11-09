@@ -27,7 +27,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 		layout = {
 			sizing = {width = clay.SizingFixed(250), height = clay.SizingGrow()},
 			layoutDirection = .LeftToRight,
-			padding = {8, 8, 8, 8},
+			padding = clay.PaddingAll(8),
 		},
 		backgroundColor = theme.Light.background,
 	},
@@ -37,11 +37,11 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 			layout = {
 				sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 				layoutDirection = .TopToBottom,
-				padding = {8, 8, 8, 8},
+				padding = clay.PaddingAll(8),
 				childAlignment = clay.ChildAlignment{y = clay.LayoutAlignmentY.Center},
 			},
 			backgroundColor = theme.Light.surface,
-			cornerRadius = clay.CornerRadiusAll(16),
+			cornerRadius = clay.CornerRadiusAll(8),
 		},
 		) {
 			if clay.UI()(
@@ -154,7 +154,13 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 			},
 			) {
 				if len(note_files) == 0 {
-					clay.Text("No notes yet", {fontSize = SIDEBAR_ITEM_DESCRIPTION_FONT_SIZE, textColor = theme.Light.text_secondary})
+					clay.Text(
+						"No notes yet",
+						{
+							fontSize = SIDEBAR_ITEM_DESCRIPTION_FONT_SIZE,
+							textColor = theme.Light.text_secondary,
+						},
+					)
 				}
 				for article, index in note_files {
 					if clay.UI(clay.ID("ArticleCard", u32(index)))(

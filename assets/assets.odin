@@ -20,6 +20,9 @@ Icon :: enum {
 	Redo,
 	Undo,
 	EllipsisVertical,
+	Square,
+	SquaresUnite,
+	X,
 }
 
 // Register new icons here; loading and cleanup are handled for every entry.
@@ -38,6 +41,9 @@ ICON_PATHS :: [Icon]cstring {
 	.Redo           = "assets/icons/redo.png",
 	.Undo           = "assets/icons/undo.png",
 	.EllipsisVertical = "assets/icons/ellipsis-vertical.png",
+	.Square = "assets/icons/square.png",
+	.SquaresUnite = "assets/icons/squares-unite.png",
+	.X = "assets/icons/x.png",
 }
 
 Manager :: struct {

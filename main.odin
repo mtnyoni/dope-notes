@@ -73,7 +73,7 @@ main :: proc() {
 		config.WINDOW_TITLE,
 		DEFAULT_WIN_W,
 		DEFAULT_WIN_H,
-		{.RESIZABLE, .HIGH_PIXEL_DENSITY, .BORDERLESS},
+		{.RESIZABLE, .HIGH_PIXEL_DENSITY, .BORDERLESS, .TRANSPARENT},
 	)
 	assert(window != nil)
 	defer sdl.DestroyWindow(window)
@@ -265,10 +265,7 @@ main :: proc() {
 		assert(
 			sdl.SetRenderDrawColor(
 				renderer,
-				u8(theme.Light.background.r),
-				u8(theme.Light.background.g),
-				u8(theme.Light.background.b),
-				u8(theme.Light.background.a),
+				0, 0, 0, 0,
 			),
 		)
 		assert(sdl.RenderClear(renderer))

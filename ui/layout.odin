@@ -14,53 +14,65 @@ UILayout :: proc(
 	delta_seconds: f32 = 1.0 / 60.0,
 	window: ^sdl.Window = nil,
 ) {
+	maximized := window != nil && .MAXIMIZED in sdl.GetWindowFlags(window)
 	if clay.UI(clay.ID("Root"))(
 	{
 		layout = {
 			sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 			layoutDirection = .TopToBottom,
+			padding = clay.PaddingAll(maximized ? 0 : 4),
 		},
+		backgroundColor = theme.Light.background,
+		cornerRadius = clay.CornerRadiusAll(maximized ? 0 : 12),
+		border = {color = theme.Light.border, width = {1, 1, 1, 1, 0}},
 	},
 	) {
-		TitleBar(window)
-		if clay.UI(clay.ID("MainArea"))({layout = {sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()}, layoutDirection = .LeftToRight}}) {
-		Sidebar(ui_assets, app_state)
-		if clay.UI(clay.ID("Content"))(
+		TitleBar(window, ui_assets)
+		if clay.UI(clay.ID("MainArea"))(
 		{
 			layout = {
 				sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
-				layoutDirection = .TopToBottom,
-				padding = {0, 8, 8, 8},
+				layoutDirection = .LeftToRight,
 			},
-			cornerRadius = clay.CornerRadiusAll(16),
 		},
 		) {
-			if clay.UI(clay.ID("ContentPanel"))(
+			Sidebar(ui_assets, app_state)
+			if clay.UI(clay.ID("Content"))(
 			{
 				layout = {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 					layoutDirection = .TopToBottom,
+					padding = {0, 8, 8, 8},
 				},
-				cornerRadius = clay.CornerRadiusAll(16),
-				backgroundColor = theme.Light.surface,
+				cornerRadius = clay.CornerRadiusAll(8),
 			},
 			) {
-				EditorToolBar(ui_assets)
-
-				if clay.UI()(
+				if clay.UI(clay.ID("ContentPanel"))(
 				{
 					layout = {
 						sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
-						layoutDirection = .LeftToRight,
-						padding = {8, 8, 8, 8},
+						layoutDirection = .TopToBottom,
 					},
-					cornerRadius = clay.CornerRadiusAll(16),
+					cornerRadius = clay.CornerRadiusAll(8),
+					backgroundColor = theme.Light.surface,
 				},
 				) {
-					DocumentView(ed, scroll_input, delta_seconds)
+					EditorToolBar(ui_assets)
+
+					if clay.UI()(
+					{
+						layout = {
+							sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
+							layoutDirection = .LeftToRight,
+							padding = {8, 8, 8, 8},
+						},
+						cornerRadius = clay.CornerRadiusAll(16),
+					},
+					) {
+						DocumentView(ed, scroll_input, delta_seconds)
+					}
 				}
 			}
 		}
-	}
 	}
 }

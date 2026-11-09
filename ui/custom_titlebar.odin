@@ -1,11 +1,13 @@
 package ui
 
+import assets "../assets"
 import theme "../theme"
 import clay "shared:clay"
 import sdl "vendor:sdl3"
 
-TITLEBAR_HEIGHT :: 32
-TITLEBAR_BUTTON_WIDTH :: 48
+TITLEBAR_HEIGHT :: 40
+TITLEBAR_BUTTON_WIDTH :: 32
+TITLEBAR_BUTTON_GAP :: 1
 
 window_hit_test :: proc "c" (
 	window: ^sdl.Window,
@@ -16,7 +18,7 @@ window_hit_test :: proc "c" (
 		// Window controls must receive pointer input instead of starting a drag.
 		width: i32
 		_ = sdl.GetWindowSize(window, &width, nil)
-		if pos.x >= width - 3 * TITLEBAR_BUTTON_WIDTH {
+		if pos.x >= width - (3 * TITLEBAR_BUTTON_WIDTH + 2 * TITLEBAR_BUTTON_GAP) {
 			return .NORMAL
 		}
 		return .DRAGGABLE
@@ -24,29 +26,70 @@ window_hit_test :: proc "c" (
 	return .NORMAL
 }
 
-TitleBar :: proc(window: ^sdl.Window) {
+TitleBar :: proc(window: ^sdl.Window, ui_assets: ^assets.Manager) {
 	if clay.UI(clay.ID("TitleBar"))(
 	{
 		layout = {
 			sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(TITLEBAR_HEIGHT)},
 			layoutDirection = .LeftToRight,
 			childAlignment = {y = .Center},
-			padding = {16, 0, 0, 0},
+			padding = {8, 0, 0, 0},
 		},
-		backgroundColor = theme.Light.background,
+		border = clay.BorderElementConfig {
+			width = clay.BorderWidth{bottom = 1},
+			color = theme.Light.border,
+		},
 	},
 	) {
-		clay.Text("Dope Notes", {fontSize = 14, textColor = theme.Light.text, wrapMode = .None})
+		if ui_assets != nil && ui_assets.app_icon != nil {
+			if clay.UI(clay.ID("TitleBarIcon"))(
+			{
+				layout = {sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)}},
+				image = {imageData = rawptr(ui_assets.app_icon)},
+			},
+			) {}
+		}
+		if clay.UI(clay.ID("TitleBarTitle"))(
+		{
+			layout = {
+				sizing = {width = clay.SizingFit(), height = clay.SizingFit()},
+				padding = {8, 0, 0, 0},
+			},
+		},
+		) {
+			clay.Text(
+				"Dope notes",
+				{fontSize = 13, textColor = theme.Light.text, wrapMode = .None},
+			)
+		}
+
 		if clay.UI()(
 		{layout = {sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(1)}}},
 		) {}
-		TitleBarButton(window, "Minimize", "−", 0)
-		TitleBarButton(window, "Maximize", "□", 1)
-		TitleBarButton(window, "Close", "×", 2)
+
+		if clay.UI()(
+		{
+			layout = clay.LayoutConfig {
+				sizing = {width = clay.SizingFit(), height = clay.SizingFixed(TITLEBAR_HEIGHT)},
+				layoutDirection = .LeftToRight,
+				childAlignment = {y = .Center},
+				childGap = TITLEBAR_BUTTON_GAP,
+			},
+		},
+		) {
+			TitleBarButton(window, ui_assets, "Minimize", 0)
+			TitleBarButton(window, ui_assets, "Maximize", 1)
+			TitleBarButton(window, ui_assets, "Close", 2)
+		}
 	}
 }
 
-TitleBarButton :: proc(window: ^sdl.Window, name, label: string, action: int) {
+TitleBarButton :: proc(
+	window: ^sdl.Window,
+	ui_assets: ^assets.Manager,
+	name: string,
+	action: int,
+) {
 	if clay.UI(clay.ID(name))(
 	{
 		layout = {
@@ -56,7 +99,6 @@ TitleBarButton :: proc(window: ^sdl.Window, name, label: string, action: int) {
 			},
 			childAlignment = {x = .Center, y = .Center},
 		},
-		backgroundColor = clay.Hovered() ? (action == 2 ? theme.Cyan_200 : theme.Gray_200) : clay.Color{},
 	},
 	) {
 		if window != nil && clay.Hovered() && clay.GetPointerState().state == .PressedThisFrame {
@@ -76,6 +118,41 @@ TitleBarButton :: proc(window: ^sdl.Window, name, label: string, action: int) {
 				_ = sdl.PushEvent(&event)
 			}
 		}
-		clay.Text(label, {fontSize = 20, textColor = theme.Light.text, wrapMode = .None})
+		icon: assets.Icon = .Square
+
+		switch action {
+		case 0:
+			icon = .Square
+		case 1:
+			icon =
+				window != nil && .MAXIMIZED in sdl.GetWindowFlags(window) ? .SquaresUnite : .Square
+		case 2:
+			icon = .X
+		}
+
+		hovered := clay.Hovered()
+		if clay.UI(clay.ID("TitleBarButtonFace", u32(action)))(
+		{
+			layout = {
+				sizing = {width = clay.SizingFixed(28), height = clay.SizingFixed(28)},
+				childAlignment = {x = .Center, y = .Center},
+			},
+			backgroundColor = hovered ? theme.Gray_200 : clay.Color{},
+			cornerRadius = clay.CornerRadiusAll(14),
+		},
+		) {
+			if action == 0 {
+				clay.Text("−", {fontSize = 16, textColor = theme.Light.text, wrapMode = .None})
+			} else if texture := assets.get(ui_assets, icon); texture != nil {
+				if clay.UI()(
+				{
+					layout = {
+						sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(12)},
+					},
+					image = {imageData = rawptr(texture)},
+				},
+				) {}
+			}
+		}
 	}
 }
