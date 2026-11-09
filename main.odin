@@ -79,8 +79,10 @@ main :: proc() {
 	defer sdl.DestroyWindow(window)
 	sdl.SetWindowHitTest(window, ui.window_hit_test, nil)
 
-	icon := img.Load("/usr/share/icons/hicolor/512x512/apps/dope-notes.png")
-	if icon == nil do icon = img.Load("packaging/icons/dope-notes.png")
+	icon := img.Load(assets.resource_path("packaging/icons/dope-notes.png"))
+	when ODIN_OS == .Linux {
+		if icon == nil do icon = img.Load("/usr/share/icons/hicolor/512x512/apps/dope-notes.png")
+	}
 	if icon != nil {
 		_ = sdl.SetWindowIcon(window, icon)
 		sdl.DestroySurface(icon)
@@ -109,8 +111,7 @@ main :: proc() {
 	clayArena := clay.CreateArenaWithCapacityAndMemory(minMemorySize, memory)
 	clay.Initialize(clayArena, {f32(width), f32(height)}, {handler = clay_ui.errorHandler})
 
-	face := font.open("/usr/share/dope-notes/font/Roboto-Regular.ttf")
-	if face == nil do face = font.open("font/Roboto-Regular.ttf")
+	face := font.open(assets.resource_path("font/Roboto-Regular.ttf"))
 	if face == nil {
 		fmt.eprintln("Could not load Dope Notes font")
 		return

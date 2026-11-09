@@ -1,6 +1,7 @@
 package assets
 
 import "core:fmt"
+import "core:os"
 import "core:strings"
 import sdl "vendor:sdl3"
 import img "vendor:sdl3/image"
@@ -51,15 +52,27 @@ Manager :: struct {
 	app_icon: ^sdl.Texture,
 }
 
+// Packaged builds keep resources beside the executable. Development and Linux
+// system installs also support their existing resource locations.
+resource_path :: proc(path: string) -> cstring {
+	if base := sdl.GetBasePath(); base != nil {
+		bundled := fmt.tprintf("%s%s", base, path)
+		if os.is_file(bundled) do return strings.clone_to_cstring(bundled, context.temp_allocator)
+	}
+	if os.is_file(path) do return strings.clone_to_cstring(path, context.temp_allocator)
+	when ODIN_OS == .Linux {
+		return strings.clone_to_cstring(fmt.tprintf("/usr/share/dope-notes/%s", path), context.temp_allocator)
+	}
+	return strings.clone_to_cstring(path, context.temp_allocator)
+}
+
 load :: proc(renderer: ^sdl.Renderer) -> (manager: Manager, ok: bool) {
-	manager.app_icon = img.LoadTexture(renderer, "/usr/share/icons/hicolor/512x512/apps/dope-notes.png")
-	if manager.app_icon == nil do manager.app_icon = img.LoadTexture(renderer, "packaging/icons/dope-notes.png")
+	manager.app_icon = img.LoadTexture(renderer, resource_path("packaging/icons/dope-notes.png"))
+	when ODIN_OS == .Linux {
+		if manager.app_icon == nil do manager.app_icon = img.LoadTexture(renderer, "/usr/share/icons/hicolor/512x512/apps/dope-notes.png")
+	}
 	for path, icon in ICON_PATHS {
-		texture := img.LoadTexture(renderer, path)
-		if texture == nil {
-			installed_path := fmt.tprintf("/usr/share/dope-notes/%s", path)
-			texture = img.LoadTexture(renderer, strings.clone_to_cstring(installed_path, context.temp_allocator))
-		}
+		texture := img.LoadTexture(renderer, resource_path(string(path)))
 		if texture == nil {
 			fmt.eprintln("Image load failed:", path, sdl.GetError())
 			destroy(&manager)

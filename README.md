@@ -17,18 +17,53 @@ Each immediate subdirectory is a notebook; its `.md` and `.markdown` files are n
 
 Linux compilation, tests, and a headless startup have been checked. Native Windows and WSLg builds have not been tested on a Windows machine.
 
+## Quick setup
+
+`git submodule sync --recursive` only synchronizes URLs for registered submodules; it does not download dependencies. Clay is now tracked as a real submodule at the revision used by these bindings. To fetch it yourself, use `git submodule update --init --recursive`.
+
+Install Git and a recent [Odin](https://odin-lang.org/docs/install/) release on PATH first. On native Windows, also install LLVM (with `clang` and `llvm-lib`) and Visual Studio Build Tools with the **Desktop development with C++** workload and Windows SDK, as required by vcpkg. Use an x64 developer PowerShell terminal.
+
+From a fresh or existing checkout:
+
+```powershell
+# Windows x64: downloads vcpkg, installs libraries, builds Clay and the app
+.\setup.ps1
+cd build\windows
+.\dope-notes.exe
+```
+
+```sh
+# Linux x86-64 / WSL: installs libraries with apt or dnf, builds Clay and the app
+bash setup.sh
+./build/fedora/dope-notes
+```
+
+The Linux script uses sudo for system packages and supports Fedora and Debian/Ubuntu releases that provide SDL3 and SDL3_image. On older distributions, follow the manual prerequisites below, then use `bash setup.sh --skip-install`. On Windows, vcpkg is stored in the ignored `.deps/vcpkg` directory unless `VCPKG_ROOT` is set. Subsequent builds find this local installation automatically. Use `.\setup.ps1 -SkipInstall` to reuse installed libraries. Both setup scripts can be rerun and produce a development build; `just` is optional.
+
 ## Native Windows build
 
 Install x64 Odin, Git, LLVM (including `clang` and `llvm-lib`), and [vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started). Set `VCPKG_ROOT` to the vcpkg directory. In PowerShell, install the x64 dependencies and build:
 
 ```powershell
-& "$env:VCPKG_ROOT\vcpkg.exe" install freetype:x64-windows sdl3:x64-windows sdl3-image:x64-windows cmark:x64-windows
+& "$env:VCPKG_ROOT\vcpkg.exe" install freetype:x64-windows sdl3:x64-windows sdl3-image[png]:x64-windows
 .\build.ps1
 cd build\windows
 .\dope-notes.exe
 ```
 
-Use `.\build.ps1 -Release` for production storage. Development notes go under `%APPDATA%\dope-notes-dev\notebooks`; release notes go under `%APPDATA%\dope-notes\notebooks`. The script copies runtime assets and DLLs beside the executable. Run it from `build\windows` so relative assets resolve. The existing `justfile` and RPM packaging remain Linux workflows.
+Use `.\build.ps1 -Release` for production storage. Development notes go under `%APPDATA%\dope-notes-dev\notebooks`; release notes go under `%APPDATA%\dope-notes\notebooks`. The script copies runtime assets and DLLs beside the executable. Assets and fonts are resolved beside the executable, so it can be launched from any directory. The existing `justfile` and RPM packaging remain Linux workflows.
+
+## Windows installer (Inno Setup)
+
+Install Inno Setup 6 or 7, then run from PowerShell:
+
+```powershell
+.\package-windows.ps1 -Version 0.0.1
+```
+
+The script locates `ISCC.exe`, creates a release build, bundles the Visual Studio C++ runtime and dependency DLLs, and produces `build/installer/dope-notes-0.0.1-windows-x64-setup.exe`. Pass `-IsccPath 'C:\path\to\ISCC.exe'` for a custom installation. Visual Studio's C++ tools and redistributable files must be installed on the build machine.
+
+The installer targets Windows 10 or newer (x64), installs under `%LOCALAPPDATA%\Programs\Dope Notes` without requiring administrator access, and creates a Start menu shortcut with an optional desktop shortcut. Notebooks remain under `%APPDATA%\dope-notes\notebooks` when upgrading or uninstalling. Use the same AppId for future releases to upgrade the existing installation. The generated installer is unsigned.
 
 ## Prerequisites
 
@@ -96,15 +131,13 @@ git clone https://github.com/mtnyoni/dope-notes.git
 cd dope-notes
 ```
 
-Clay is expected at `shared/clay`. Although `.gitmodules` names it, the current repository does not record a Git submodule entry, so clone it explicitly on a fresh checkout:
+Initialize the pinned Clay submodule (also done by either setup script):
 
 ```sh
-mkdir -p shared
-git clone https://github.com/nicbarker/clay.git shared/clay
-git -C shared/clay checkout e6cc36941ab2af5d81107617039d6f527a1c660b
+git submodule update --init --recursive
 ```
 
-Skip the clone if that directory already contains the Clay repository. The pinned revision matches the binding API used by this project.
+The following manual steps are only needed if you did not use `setup.sh`.
 
 Build Clay for the host system and create the import collection:
 
@@ -198,7 +231,7 @@ Inside WSL, use the Linux path, not a `C:\\...` path. Run `just setup-shared` an
 
 The source line containing the cursor is editable and displays its Markdown markers. Other lines render through CommonMark with headings, paragraphs, bold and italic text, lists, quotes, code blocks, rules, and styled link labels. Click rendered text or use the arrow keys to move the cursor; the previous line returns to formatted rendering automatically. There is no separate Edit/Preview mode. Per-note edits remain in memory when switching notes.
 
-The renderer uses Odin's `vendor:commonmark` binding, which links `libcmark` on Linux. Install it before building:
+The renderer uses Odin's `vendor:commonmark` binding. Windows uses `cmark_static.lib` bundled with Odin; vcpkg's `cmark.lib` and `cmark.dll` are unnecessary. Linux links `libcmark`; install it before building:
 
 ```sh
 # Fedora

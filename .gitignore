@@ -1,5 +1,7 @@
 
-shared/
+shared/*
+!shared/clay/
+.deps/
 font/font.a
 font/font.o
 font/font.obj

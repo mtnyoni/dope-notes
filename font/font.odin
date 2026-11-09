@@ -5,7 +5,7 @@ import "core:c"
 Font :: struct {}
 
 when ODIN_OS == .Windows {
-	foreign import font_lib {"font.lib", "system:freetype"}
+	foreign import font_lib {"font.lib", "system:freetype.lib"}
 } else {
 	foreign import font_lib {"font.a", "system:freetype"}
 }
