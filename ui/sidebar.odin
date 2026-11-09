@@ -143,7 +143,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 				)
 			}
 
-			if clay.UI()(
+			if clay.UI(clay.ID("SidebarNotesScroll"))(
 			{
 				layout = {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
@@ -151,6 +151,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 					childGap = 2,
 					padding = clay.Padding{top = 8},
 				},
+				clip = {vertical = true, childOffset = clay.GetScrollOffset()},
 			},
 			) {
 				if len(note_files) == 0 {

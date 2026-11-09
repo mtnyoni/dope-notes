@@ -303,7 +303,7 @@ main :: proc() {
 			}
 		}
 
-		clay.UpdateScrollContainers(false, {}, delta_seconds)
+		clay.UpdateScrollContainers(false, {scroll_delta.x * 7.2, scroll_delta.y * 7.2}, delta_seconds)
 		clay.BeginLayout()
 		ui.UILayout(
 			&ui_assets,
