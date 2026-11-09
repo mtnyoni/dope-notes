@@ -43,7 +43,7 @@ $out = Join-Path $root 'build/windows'
 New-Item -ItemType Directory -Force $out | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $out 'font'), (Join-Path $out 'packaging/icons') | Out-Null
 $flags = if ($Release) { @('-o:speed', '-define:DOPE_NOTES_DEV=false') } else { @('-debug', '-define:DOPE_NOTES_DEV=true') }
-& odin build $root "-collection:shared=$shared" "-out:$out/dope-notes.exe" "-extra-linker-flags:/LIBPATH:$lib" @flags
+& odin build $root "-collection:shared=$shared" "-out:$out/dope-notes.exe" '-subsystem:windows' "-extra-linker-flags:/LIBPATH:$lib" @flags
 if ($LASTEXITCODE -ne 0) { throw 'Odin build failed.' }
 Copy-Item "$bin/*.dll" $out -Force
 Copy-Item (Join-Path $root 'assets') $out -Recurse -Force
