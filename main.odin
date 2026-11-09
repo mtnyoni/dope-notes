@@ -87,18 +87,19 @@ main :: proc() {
 	}
 
 	text_cursor := sdl.CreateSystemCursor(.TEXT)
+	resize_nwse := sdl.CreateSystemCursor(.NWSE_RESIZE)
+	resize_nesw := sdl.CreateSystemCursor(.NESW_RESIZE)
+	resize_ew := sdl.CreateSystemCursor(.EW_RESIZE)
+	resize_ns := sdl.CreateSystemCursor(.NS_RESIZE)
 	default_cursor := sdl.GetDefaultCursor()
-	using_text_cursor := false
-
+	active_cursor := default_cursor
 	defer {
-		if text_cursor != nil {
-			if default_cursor != nil {
-				if !sdl.SetCursor(default_cursor) {
-					fmt.eprintln("Could not restore default cursor:", sdl.GetError())
-				}
-			}
-			sdl.DestroyCursor(text_cursor)
-		}
+		if default_cursor != nil do _ = sdl.SetCursor(default_cursor)
+		if text_cursor != nil do sdl.DestroyCursor(text_cursor)
+		if resize_nwse != nil do sdl.DestroyCursor(resize_nwse)
+		if resize_nesw != nil do sdl.DestroyCursor(resize_nesw)
+		if resize_ew != nil do sdl.DestroyCursor(resize_ew)
+		if resize_ns != nil do sdl.DestroyCursor(resize_ns)
 	}
 
 	width, height: i32
@@ -274,16 +275,22 @@ main :: proc() {
 		mouse_buttons := sdl.GetMouseState(&mouse_x, &mouse_y)
 		clay.SetLayoutDimensions({f32(width), f32(height)})
 		clay.SetPointerState({mouse_x, mouse_y}, .LEFT in mouse_buttons)
-		if text_cursor != nil && default_cursor != nil {
-			over_editor := sdl.GetMouseFocus() == window && clay.PointerOver(clay.ID(ui.EDITOR_ID))
-			if over_editor != using_text_cursor {
-				cursor := over_editor ? text_cursor : default_cursor
-				if sdl.SetCursor(cursor) {
-					using_text_cursor = over_editor
-				} else {
-					fmt.eprintln("Could not change mouse cursor:", sdl.GetError())
+		if default_cursor != nil {
+			cursor := default_cursor
+			if sdl.GetMouseFocus() == window {
+				point := sdl.Point{i32(mouse_x), i32(mouse_y)}
+				hit := ui.titlebar_hit_test(window, &point)
+				#partial switch hit {
+				case .RESIZE_TOPLEFT, .RESIZE_BOTTOMRIGHT: cursor = resize_nwse
+				case .RESIZE_TOPRIGHT, .RESIZE_BOTTOMLEFT: cursor = resize_nesw
+				case .RESIZE_LEFT, .RESIZE_RIGHT: cursor = resize_ew
+				case .RESIZE_TOP, .RESIZE_BOTTOM: cursor = resize_ns
+				case:
+					if clay.PointerOver(clay.ID(ui.EDITOR_ID)) do cursor = text_cursor
 				}
 			}
+			if cursor == nil do cursor = default_cursor
+			if cursor != active_cursor && sdl.SetCursor(cursor) do active_cursor = cursor
 		}
 
 		if app_state.current_doc != loaded_doc {
