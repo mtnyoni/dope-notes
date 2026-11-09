@@ -13,9 +13,22 @@ Each immediate subdirectory is a notebook; its `.md` and `.markdown` files are n
 ## Supported setup
 
 - **Linux:** native build and desktop application. The commands below target x86-64.
-- **Windows:** run the Linux build through **WSL2 with WSLg**. Native Windows builds are not configured: the font binding links a Linux archive and the `justfile` uses Bash and Unix symbolic links.
+- **Windows:** native x64 build with PowerShell and vcpkg, or the Linux build through **WSL2 with WSLg**.
 
-Linux compilation, tests, and a headless startup have been checked. The Windows/WSLg instructions follow Microsoft's setup guidance but have not been tested on a Windows machine.
+Linux compilation, tests, and a headless startup have been checked. Native Windows and WSLg builds have not been tested on a Windows machine.
+
+## Native Windows build
+
+Install x64 Odin, Git, LLVM (including `clang` and `llvm-lib`), and [vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started). Set `VCPKG_ROOT` to the vcpkg directory. In PowerShell, install the x64 dependencies and build:
+
+```powershell
+& "$env:VCPKG_ROOT\vcpkg.exe" install freetype:x64-windows sdl3:x64-windows sdl3-image:x64-windows cmark:x64-windows
+.\build.ps1
+cd build\windows
+.\dope-notes.exe
+```
+
+Use `.\build.ps1 -Release` for production storage. Development notes go under `%APPDATA%\dope-notes-dev\notebooks`; release notes go under `%APPDATA%\dope-notes\notebooks`. The script copies runtime assets and DLLs beside the executable. Run it from `build\windows` so relative assets resolve. The existing `justfile` and RPM packaging remain Linux workflows.
 
 ## Prerequisites
 
@@ -218,3 +231,9 @@ odin test ui/clay -collection:shared=./odin_shared
 - **Renderer initialization fails:** try `SDL_RENDER_DRIVER=software just run` to use software rendering.
 - **Font fails to load:** run from the repository root and confirm `font/Roboto-Regular.ttf` exists.
 - **Headless environment:** `SDL_VIDEODRIVER=dummy just run` checks startup without displaying a window. Stop it with Ctrl+C; the dummy driver may not support OS cursors.
+
+## GitHub notebook sync
+
+Install [GitHub CLI](https://cli.github.com/) and Git, then sign in with `gh auth login`. Set `DOPE_NOTES_GITHUB_REPO` to the target `owner/repo` before starting Dope Notes. Configure your Git commit identity (`git config --global user.name` and `git config --global user.email`). Press **Ctrl+Shift+G** in the app to save the active note, pull the repository's `main` branch, and push the notebooks. The app uses the currently authenticated `gh` account and stores no GitHub token. Sync results and errors appear in the launching terminal.
+
+Use a repository dedicated to notebooks. On the first sync, an empty repository is simplest; an existing `main` branch must have compatible history. If Git reports a conflict, resolve it in the notebook storage directory before syncing again. Sync is manual and runs on the app's main thread, so the window may pause during network operations.

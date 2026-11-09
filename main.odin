@@ -136,13 +136,23 @@ main :: proc() {
 	defer clay_ui.destroy_clay_renderer(&clay_renderer)
 
 	data_home := os.get_env("XDG_DATA_HOME", context.temp_allocator)
+	when ODIN_OS == .Windows {
+		data_home = os.get_env("APPDATA", context.temp_allocator)
+	}
 	if data_home == "" {
 		home := os.get_env("HOME", context.temp_allocator)
+		when ODIN_OS == .Windows {
+			home = os.get_env("USERPROFILE", context.temp_allocator)
+		}
 		if home == "" {
-			fmt.eprintln("HOME is unset; cannot find notes storage")
+			fmt.eprintln("Cannot find user notes storage")
 			return
 		}
-		data_home = fmt.tprintf("%s/.local/share", home)
+		when ODIN_OS == .Windows {
+			data_home = fmt.tprintf("%s/AppData/Roaming", home)
+		} else {
+			data_home = fmt.tprintf("%s/.local/share", home)
+		}
 	}
 	notes_dir := config.notebooks_path(data_home)
 	first_run := !os.exists(notes_dir)
@@ -215,6 +225,7 @@ main :: proc() {
 	running := true
 	for running {
 		defer free_all(context.temp_allocator)
+		sync_requested := false
 		sdl.LockMutex(ticker.mutex)
 		save_due := ticker.pending
 		ticker.pending = false
@@ -229,6 +240,10 @@ main :: proc() {
 		// input: ui.Input
 
 		for sdl.PollEvent(&e) {
+			if e.type == .KEY_DOWN && e.key.key == sdl.K_G && sdl.KMOD_CTRL & e.key.mod != {} && sdl.KMOD_SHIFT & e.key.mod != {} {
+				sync_requested = true
+				continue
+			}
 			ui.editor_handle_event(editor_state, &e)
 			#partial switch e.type {
 			case .MOUSE_WHEEL:
@@ -247,6 +262,29 @@ main :: proc() {
 				if e.button.button == sdl.BUTTON_LEFT {
 					// input.left_released = true
 				}
+			}
+		}
+		if sync_requested {
+			save_focused_note(editor_state, loaded_doc, &last_saved)
+			if config.sync_github(notes_dir) {
+				fresh_notebooks, fresh_err := markdown.get_notes(notes_dir)
+				if fresh_err == nil {
+					ui.editor_close_documents(&documents)
+					markdown.free_notebooks(app_state.notebooks)
+					app_state = state.make_app_state(fresh_notebooks, "Default")
+					editor_state = &empty_editor
+					loaded_doc = ""
+					delete(last_saved)
+					last_saved = ""
+					if note := state.current_note(&app_state); note != nil {
+						editor_state = ui.editor_open_note(&documents, note, face)
+						loaded_doc = note.path
+						last_saved = strings.clone(string(note.content))
+					}
+				}
+				fmt.println("GitHub sync complete")
+			} else {
+				fmt.eprintln("GitHub sync failed; see details above")
 			}
 		}
 		state.update_note_content(&app_state, loaded_doc, ui.editor_text(editor_state))

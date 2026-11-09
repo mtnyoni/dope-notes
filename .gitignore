@@ -2,6 +2,8 @@
 shared/
 font/font.a
 font/font.o
+font/font.obj
+font/font.lib
 odin_shared/
 dope-notes
 build/

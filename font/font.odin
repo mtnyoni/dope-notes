@@ -4,7 +4,11 @@ import "core:c"
 
 Font :: struct {}
 
-foreign import font_lib {"font.a", "system:freetype"}
+when ODIN_OS == .Windows {
+	foreign import font_lib {"font.lib", "system:freetype"}
+} else {
+	foreign import font_lib {"font.a", "system:freetype"}
+}
 
 @(default_calling_convention = "c", link_prefix = "app_font_")
 foreign font_lib {
