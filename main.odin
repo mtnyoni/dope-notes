@@ -1,8 +1,9 @@
 package main
 
-import state "./state"
 import config "./appconfig"
+import state "./state"
 import assets "assets"
+import buffer "buffer"
 import "core:c"
 import "core:fmt"
 import "core:mem"
@@ -10,7 +11,6 @@ import "core:os"
 import "core:strings"
 import font "font"
 import markdown "markdown"
-import buffer "buffer"
 import clay "shared:clay"
 import theme "theme"
 import ui "ui"
@@ -22,7 +22,7 @@ DEFAULT_WIN_W :: 1320
 DEFAULT_WIN_H :: 640
 
 Save_Ticker :: struct {
-	mutex: ^sdl.Mutex,
+	mutex:   ^sdl.Mutex,
 	running: bool,
 	pending: bool,
 }
@@ -73,10 +73,12 @@ main :: proc() {
 		config.WINDOW_TITLE,
 		DEFAULT_WIN_W,
 		DEFAULT_WIN_H,
-		{.RESIZABLE, .HIGH_PIXEL_DENSITY},
+		{.RESIZABLE, .HIGH_PIXEL_DENSITY, .BORDERLESS},
 	)
 	assert(window != nil)
 	defer sdl.DestroyWindow(window)
+	sdl.SetWindowHitTest(window, ui.window_hit_test, nil)
+
 	icon := img.Load("/usr/share/icons/hicolor/512x512/apps/dope-notes.png")
 	if icon == nil do icon = img.Load("packaging/icons/dope-notes.png")
 	if icon != nil {
@@ -149,7 +151,10 @@ main :: proc() {
 			fmt.eprintln("Could not create notes directory:", err)
 			return
 		}
-		if err := os.write_entire_file(fmt.tprintf("%s/Welcome.md", default_notebook), "Hello there!\n"); err != nil {
+		if err := os.write_entire_file(
+			fmt.tprintf("%s/Welcome.md", default_notebook),
+			"Hello there!\n",
+		); err != nil {
 			fmt.eprintln("Could not create welcome note:", err)
 			return
 		}
@@ -164,7 +169,10 @@ main :: proc() {
 
 	documents: ui.EditorDocuments
 	defer ui.editor_close_documents(&documents)
-	empty_editor := ui.EditorState{buf = buffer.make_gap_buffer(64), face = face}
+	empty_editor := ui.EditorState {
+		buf  = buffer.make_gap_buffer(64),
+		face = face,
+	}
 	defer ui.editor_destroy_state(&empty_editor)
 	editor_state := &empty_editor
 	if note := state.current_note(&app_state); note != nil {
@@ -174,7 +182,10 @@ main :: proc() {
 	last_saved := ""
 	if note := state.current_note(&app_state); note != nil do last_saved = strings.clone(string(note.content))
 	defer delete(last_saved)
-	ticker := Save_Ticker{mutex = sdl.CreateMutex(), running = true}
+	ticker := Save_Ticker {
+		mutex   = sdl.CreateMutex(),
+		running = true,
+	}
 	assert(ticker.mutex != nil)
 	defer sdl.DestroyMutex(ticker.mutex)
 	thread := sdl.CreateThread(save_tick, "note-save-ticker", &ticker)
@@ -309,6 +320,7 @@ main :: proc() {
 				pointer_in_window = sdl.GetMouseFocus() == window,
 			},
 			delta_seconds,
+		window,
 		)
 		commands := clay.EndLayout(delta_seconds)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)

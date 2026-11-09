@@ -4,6 +4,7 @@ import assets "../assets"
 import state "../state"
 import theme "../theme"
 import clay "shared:clay"
+import sdl "vendor:sdl3"
 
 UILayout :: proc(
 	ui_assets: ^assets.Manager,
@@ -11,15 +12,18 @@ UILayout :: proc(
 	ed: ^EditorState,
 	scroll_input: ScrollInput = {},
 	delta_seconds: f32 = 1.0 / 60.0,
+	window: ^sdl.Window = nil,
 ) {
 	if clay.UI(clay.ID("Root"))(
 	{
 		layout = {
 			sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
-			layoutDirection = .LeftToRight,
+			layoutDirection = .TopToBottom,
 		},
 	},
 	) {
+		TitleBar(window)
+		if clay.UI(clay.ID("MainArea"))({layout = {sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()}, layoutDirection = .LeftToRight}}) {
 		Sidebar(ui_assets, app_state)
 		if clay.UI(clay.ID("Content"))(
 		{
@@ -57,5 +61,6 @@ UILayout :: proc(
 				}
 			}
 		}
+	}
 	}
 }
