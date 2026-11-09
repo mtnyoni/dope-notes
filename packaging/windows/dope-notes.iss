@@ -22,6 +22,7 @@ LicenseFile={#ProjectRoot}\LICENSE
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile={#ProjectRoot}\packaging\icons\dope-notes.ico
 UninstallDisplayIcon={app}\dope-notes.exe
 CloseApplications=yes
 SetupLogging=yes
