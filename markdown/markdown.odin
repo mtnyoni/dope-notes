@@ -36,6 +36,8 @@ RenderLine :: struct {
 	source_start, source_end: int,
 }
 RenderBlock :: struct {
+	table, table_header: bool,
+	table_cells: [dynamic]TableCell,
 	lines:                        [dynamic]RenderLine,
 	font_size:                    u16,
 	line_height:                  f32,
@@ -97,6 +99,10 @@ render_markdown_ast_to_clay :: proc(
 			cornerRadius = clay.CornerRadiusAll(4),
 		},
 		) {
+			if block.table {
+				render_table_row(block)
+				continue
+			}
 
 			if block.rule {
 				if clay.UI()(

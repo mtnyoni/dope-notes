@@ -31,6 +31,7 @@ prepare_live_markdown_layout :: proc(
 ) -> DocumentLayout {
 	base := prepare_markdown_layout(root, options)
 	source_rows := source_lines(source)
+	tables := prepare_table_rows(source, source_rows[:], base, options)
 	live := DocumentLayout {
 		blocks = make([dynamic]RenderBlock, context.temp_allocator),
 	}
@@ -41,6 +42,13 @@ prepare_live_markdown_layout :: proc(
 		for block_index < len(base.blocks) && base.blocks[block_index].source_end_line < line_number do block_index += 1
 		original: ^RenderBlock
 		if block_index < len(base.blocks) && base.blocks[block_index].source_line <= line_number do original = &base.blocks[block_index]
+		if table, found := tables[index]; found && index != active_line {
+			if table.height > 0 {
+				append(&live.blocks, table)
+				live.height += table.height
+			}
+			continue
+		}
 		if index == active_line || (original == nil && row.start == row.end) {
 			size: u16 = 15
 			height: f32 = 24
