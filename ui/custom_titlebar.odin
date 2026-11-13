@@ -5,8 +5,8 @@ import theme "../theme"
 import clay "shared:clay"
 import sdl "vendor:sdl3"
 
-TITLEBAR_HEIGHT :: 40
-TITLEBAR_BUTTON_WIDTH :: 32
+TITLEBAR_HEIGHT :: 32
+TITLEBAR_BUTTON_WIDTH :: 28
 TITLEBAR_BUTTON_GAP :: 1
 TITLEBAR_RESIZE_EDGE :: 6
 TITLEBAR_RESIZE_CORNER :: 12
@@ -26,6 +26,7 @@ titlebar_hit_test :: proc "c" (window: ^sdl.Window, pos: ^sdl.Point) -> sdl.HitT
 		if pos.y < TITLEBAR_HEIGHT && pos.x < width - (3 * TITLEBAR_BUTTON_WIDTH + 2 * TITLEBAR_BUTTON_GAP) do return .DRAGGABLE
 		return .NORMAL
 	}
+
 	left := pos.x < TITLEBAR_RESIZE_EDGE
 	right := pos.x >= width - TITLEBAR_RESIZE_EDGE
 	top := pos.y < TITLEBAR_RESIZE_EDGE
@@ -34,15 +35,18 @@ titlebar_hit_test :: proc "c" (window: ^sdl.Window, pos: ^sdl.Point) -> sdl.HitT
 		if pos.x < TITLEBAR_RESIZE_CORNER do return .RESIZE_TOPLEFT
 		if pos.x >= width - TITLEBAR_RESIZE_CORNER do return .RESIZE_TOPRIGHT
 	}
+
 	if pos.y >= height - TITLEBAR_RESIZE_CORNER {
 		if pos.x < TITLEBAR_RESIZE_CORNER do return .RESIZE_BOTTOMLEFT
 		if pos.x >= width - TITLEBAR_RESIZE_CORNER do return .RESIZE_BOTTOMRIGHT
 	}
+
 	if top do return .RESIZE_TOP
 	if bottom do return .RESIZE_BOTTOM
 	if left do return .RESIZE_LEFT
 	if right do return .RESIZE_RIGHT
 	if pos.y < TITLEBAR_HEIGHT && pos.x < width - (3 * TITLEBAR_BUTTON_WIDTH + 2 * TITLEBAR_BUTTON_GAP) do return .DRAGGABLE
+
 	return .NORMAL
 }
 
@@ -53,11 +57,7 @@ TitleBar :: proc(window: ^sdl.Window, ui_assets: ^assets.Manager) {
 			sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(TITLEBAR_HEIGHT)},
 			layoutDirection = .LeftToRight,
 			childAlignment = {y = .Center},
-			padding = {8, 0, 0, 0},
-		},
-		border = clay.BorderElementConfig {
-			width = clay.BorderWidth{bottom = 1},
-			color = theme.Light.border,
+			padding = clay.Padding{left = 8, right = 8, top = 0, bottom = 0},
 		},
 	},
 	) {

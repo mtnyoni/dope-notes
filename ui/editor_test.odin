@@ -23,7 +23,7 @@ editor_newlines_wrapping_and_vertical_navigation :: proc(t: ^testing.T) {
 	testing.expect(t, face != nil)
 	if face == nil do return
 	defer font.close(face)
-	ed := EditorState{buf = buffer.make_gap_buffer(64), focused = true, face = face, content_width = 1000}
+	ed := EditorState{buf = buffer.make_gap_buffer(64), focused = true, font = face, content_width = 1000}
 	defer buffer.destroy_gap_buffer(&ed.buf)
 	buffer.insert(&ed.buf, 0, "hello\nworld")
 	ed.cursor = 3

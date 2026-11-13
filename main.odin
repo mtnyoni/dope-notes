@@ -183,7 +183,7 @@ main :: proc() {
 	defer ui.editor_close_documents(&documents)
 	empty_editor := ui.EditorState {
 		buf  = buffer.make_gap_buffer(64),
-		face = face,
+		font = face,
 	}
 	defer ui.editor_destroy_state(&empty_editor)
 	editor_state := &empty_editor
@@ -241,7 +241,10 @@ main :: proc() {
 		// input: ui.Input
 
 		for sdl.PollEvent(&e) {
-			if e.type == .KEY_DOWN && e.key.key == sdl.K_G && sdl.KMOD_CTRL & e.key.mod != {} && sdl.KMOD_SHIFT & e.key.mod != {} {
+			if e.type == .KEY_DOWN &&
+			   e.key.key == sdl.K_G &&
+			   sdl.KMOD_CTRL & e.key.mod != {} &&
+			   sdl.KMOD_SHIFT & e.key.mod != {} {
 				sync_requested = true
 				continue
 			}
@@ -302,12 +305,7 @@ main :: proc() {
 		assert(sdl.GetRenderOutputSize(renderer, &output_width, &output_height))
 		scale_x := f32(output_width) / f32(width)
 		scale_y := f32(output_height) / f32(height)
-		assert(
-			sdl.SetRenderDrawColor(
-				renderer,
-				0, 0, 0, 0,
-			),
-		)
+		assert(sdl.SetRenderDrawColor(renderer, 0, 0, 0, 0))
 		assert(sdl.RenderClear(renderer))
 
 		mouse_x, mouse_y: f32
@@ -320,10 +318,14 @@ main :: proc() {
 				point := sdl.Point{i32(mouse_x), i32(mouse_y)}
 				hit := ui.titlebar_hit_test(window, &point)
 				#partial switch hit {
-				case .RESIZE_TOPLEFT, .RESIZE_BOTTOMRIGHT: cursor = resize_nwse
-				case .RESIZE_TOPRIGHT, .RESIZE_BOTTOMLEFT: cursor = resize_nesw
-				case .RESIZE_LEFT, .RESIZE_RIGHT: cursor = resize_ew
-				case .RESIZE_TOP, .RESIZE_BOTTOM: cursor = resize_ns
+				case .RESIZE_TOPLEFT, .RESIZE_BOTTOMRIGHT:
+					cursor = resize_nwse
+				case .RESIZE_TOPRIGHT, .RESIZE_BOTTOMLEFT:
+					cursor = resize_nesw
+				case .RESIZE_LEFT, .RESIZE_RIGHT:
+					cursor = resize_ew
+				case .RESIZE_TOP, .RESIZE_BOTTOM:
+					cursor = resize_ns
 				case:
 					if clay.PointerOver(clay.ID(ui.EDITOR_ID)) do cursor = text_cursor
 				}
@@ -349,7 +351,11 @@ main :: proc() {
 			}
 		}
 
-		clay.UpdateScrollContainers(false, {scroll_delta.x * 7.2, scroll_delta.y * 7.2}, delta_seconds)
+		clay.UpdateScrollContainers(
+			false,
+			{scroll_delta.x * 7.2, scroll_delta.y * 7.2},
+			delta_seconds,
+		)
 		clay.BeginLayout()
 		ui.UILayout(
 			&ui_assets,
@@ -363,7 +369,7 @@ main :: proc() {
 				pointer_in_window = sdl.GetMouseFocus() == window,
 			},
 			delta_seconds,
-		window,
+			window,
 		)
 		commands := clay.EndLayout(delta_seconds)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)

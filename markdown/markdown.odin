@@ -6,43 +6,49 @@ import "core:strings"
 import clay "shared:clay"
 import commonmark "vendor:commonmark"
 
-MeasureText :: #type proc "c" (text: clay.StringSlice, config: ^clay.TextElementConfig, user_data: rawptr) -> clay.Dimensions
+MeasureText :: #type proc "c" (
+	text: clay.StringSlice,
+	config: ^clay.TextElementConfig,
+	user_data: rawptr,
+) -> clay.Dimensions
 
 RenderOptions :: struct {
-	width: f32,
-	measure: MeasureText,
-	user_data: rawptr,
-	show_caret: bool,
-	cursor: int,
+	width:                          f32,
+	measure:                        MeasureText,
+	user_data:                      rawptr,
+	show_caret:                     bool,
+	cursor:                         int,
+	selection_start, selection_end: int,
 }
 
 TextSpan :: struct {
-	text: string,
-	style: u16, // FreeType style bits: 1 = bold, 2 = italic.
-	color: clay.Color,
-	code: bool,
-	source_line: int,
+	text:          string,
+	style:         u16, // FreeType style bits: 1 = bold, 2 = italic.
+	color:         clay.Color,
+	code:          bool,
+	selected:      bool,
+	source_line:   int,
 	source_column: int,
 }
 
 RenderLine :: struct {
-	spans: [dynamic]TextSpan,
+	spans:                    [dynamic]TextSpan,
 	source_start, source_end: int,
 }
 RenderBlock :: struct {
-	lines: [dynamic]RenderLine,
-	font_size: u16,
-	line_height: f32,
-	indent: f32,
-	marker: string,
-	code, quote, rule: bool,
-	padding: f32,
-	height: f32,
-	spacing: f32,
-	top_padding, bottom_padding: f32,
+	lines:                        [dynamic]RenderLine,
+	font_size:                    u16,
+	line_height:                  f32,
+	indent:                       f32,
+	marker:                       string,
+	code, quote, rule:            bool,
+	padding:                      f32,
+	height:                       f32,
+	spacing:                      f32,
+	top_padding, bottom_padding:  f32,
 	source_line, source_end_line: int,
-	active: bool,
-	node: ^commonmark.Node,
+	active:                       bool,
+	node:                         ^commonmark.Node,
 }
 DocumentLayout :: struct {
 	blocks: [dynamic]RenderBlock,
@@ -52,81 +58,157 @@ DocumentLayout :: struct {
 // Layout is computed before Clay draws so the shared document scroller knows
 // the formatted height, rather than the number of source Markdown lines.
 prepare_markdown_layout :: proc(root: ^commonmark.Node, options: RenderOptions) -> DocumentLayout {
-	layout := DocumentLayout{blocks = make([dynamic]RenderBlock, context.temp_allocator)}
+	layout := DocumentLayout {
+		blocks = make([dynamic]RenderBlock, context.temp_allocator),
+	}
 	if root != nil do append_markdown_blocks(root, &layout, options, 0, "", false)
 	return layout
 }
 
-render_markdown_ast_to_clay :: proc(root: ^commonmark.Node, options: RenderOptions, prepared: ^DocumentLayout = nil) {
+render_markdown_ast_to_clay :: proc(
+	root: ^commonmark.Node,
+	options: RenderOptions,
+	prepared: ^DocumentLayout = nil,
+) {
 	if root == nil do return
+
 	prepared := prepared
 	local: DocumentLayout
 	if prepared == nil {
 		local = prepare_markdown_layout(root, options)
 		prepared = &local
 	}
+
 	for block, index in prepared.blocks {
-		if clay.UI(clay.ID("MarkdownBlock", u32(index)))({
+		left_padding := u16(block.indent)
+		bottom_padding := u16(block.spacing)
+		if clay.UI(clay.ID("MarkdownBlock", u32(index)))(
+		{
 			layout = {
 				sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(block.height)},
 				layoutDirection = .LeftToRight,
-				padding = {u16(block.indent), 0, 0, u16(block.spacing)},
+				padding = clay.Padding {
+					left = left_padding,
+					right = 0,
+					top = 0,
+					bottom = bottom_padding,
+				},
 			},
 			cornerRadius = clay.CornerRadiusAll(4),
-		}) {
+		},
+		) {
+
 			if block.rule {
-				if clay.UI()({layout = {sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(1)}}, backgroundColor = theme.Light.border}) {}
+				if clay.UI()(
+				{
+					layout = {sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(1)}},
+					backgroundColor = theme.Light.border,
+				},
+				) {}
 				continue
 			}
+
 			if len(block.marker) > 0 {
-				if clay.UI()({layout = {sizing = {width = clay.SizingFixed(24), height = clay.SizingFixed(block.line_height)}, childAlignment = {y = .Center}}}) {
-					clay.Text(block.marker, {fontSize = block.font_size, textColor = theme.Light.text, wrapMode = .None})
+				if clay.UI()(
+				{
+					layout = {
+						sizing = {
+							width = clay.SizingFixed(24),
+							height = clay.SizingFixed(block.line_height),
+						},
+						childAlignment = {y = .Center},
+					},
+				},
+				) {
+					clay.Text(
+						block.marker,
+						{
+							fontSize = block.font_size,
+							textColor = theme.Light.text,
+							wrapMode = .None,
+						},
+					)
 				}
 			}
-			if clay.UI()({
+
+			if clay.UI()(
+			{
 				layout = {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 					layoutDirection = .TopToBottom,
-					padding = {u16(block.padding + (block.quote ? 10 : 0)), u16(block.padding), u16(block.top_padding), u16(block.bottom_padding)},
+					padding = {
+						u16(block.padding + (block.quote ? 10 : 0)),
+						u16(block.padding),
+						u16(block.top_padding),
+						u16(block.bottom_padding),
+					},
 				},
 				backgroundColor = block.code ? theme.Gray_100 : (block.active ? theme.Cyan_50 : clay.Color{}),
-				cornerRadius = block.code ? clay.CornerRadius {
-					topLeft = block.top_padding > 0 ? 6 : 0,
-					topRight = block.top_padding > 0 ? 6 : 0,
-					bottomLeft = block.bottom_padding > 0 ? 6 : 0,
-					bottomRight = block.bottom_padding > 0 ? 6 : 0,
-				} : clay.CornerRadiusAll(4),
+				cornerRadius = block.code ? clay.CornerRadius{topLeft = block.top_padding > 0 ? 6 : 0, topRight = block.top_padding > 0 ? 6 : 0, bottomLeft = block.bottom_padding > 0 ? 6 : 0, bottomRight = block.bottom_padding > 0 ? 6 : 0} : clay.CornerRadiusAll(4),
 				border = block.quote ? clay.BorderElementConfig{color = theme.Gray_300, width = {2, 0, 0, 0, 0}} : clay.BorderElementConfig{},
-			}) {
+			},
+			) {
 				for line, line_index in block.lines {
-					if clay.UI()({
+					if clay.UI()(
+					{
 						layout = {
-							sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(block.line_height)},
+							sizing = {
+								width = clay.SizingGrow(),
+								height = clay.SizingFixed(block.line_height),
+							},
 							layoutDirection = .LeftToRight,
 							childAlignment = {y = .Center},
 						},
-					}) {
+					},
+					) {
 						for span in line.spans {
 							if len(span.text) == 0 do continue
-							if clay.UI()({
-								layout = {sizing = {width = clay.SizingFit(), height = clay.SizingFit()}},
-								backgroundColor = span.code ? theme.Gray_100 : clay.Color{},
+							if clay.UI()(
+							{
+								layout = {
+									sizing = {width = clay.SizingFit(), height = clay.SizingFit()},
+								},
+								backgroundColor = span.selected ? theme.Light.selection : (span.code ? theme.Gray_100 : clay.Color{}),
 								cornerRadius = clay.CornerRadiusAll(2),
-							}) {
-								clay.Text(span.text, {fontId = span.style, fontSize = block.font_size, textColor = span.color, wrapMode = .None})
+							},
+							) {
+								clay.Text(
+									span.text,
+									{
+										fontId = span.style,
+										fontSize = block.font_size,
+										textColor = span.color,
+										wrapMode = .None,
+									},
+								)
 							}
 						}
 						if block.active && options.show_caret {
 							last := line_index == len(block.lines) - 1
-							if options.cursor >= line.source_start && (options.cursor < line.source_end || (last && options.cursor == line.source_end)) {
+							if options.cursor >= line.source_start &&
+							   (options.cursor < line.source_end ||
+									   (last && options.cursor == line.source_end)) {
 								span := line.spans[0]
 								span.text = span.text[:options.cursor - line.source_start]
 								x := span_width(span, block.font_size, options)
-								if clay.UI(clay.ID("Caret"))({
-									layout = {sizing = {width = clay.SizingFixed(2), height = clay.SizingFixed(20)}},
-									floating = {attachTo = .Parent, offset = {x, 2}, zIndex = 1, pointerCaptureMode = .Passthrough, clipTo = .AttachedParent},
+								if clay.UI(clay.ID("Caret"))(
+								{
+									layout = {
+										sizing = {
+											width = clay.SizingFixed(2),
+											height = clay.SizingFixed(20),
+										},
+									},
+									floating = {
+										attachTo = .Parent,
+										offset = {x, 2},
+										zIndex = 1,
+										pointerCaptureMode = .Passthrough,
+										clipTo = .AttachedParent,
+									},
 									backgroundColor = theme.Light.text,
-								}) {}
+								},
+								) {}
 							}
 						}
 					}
@@ -136,33 +218,70 @@ render_markdown_ast_to_clay :: proc(root: ^commonmark.Node, options: RenderOptio
 	}
 }
 
-append_markdown_blocks :: proc(node: ^commonmark.Node, layout: ^DocumentLayout, options: RenderOptions, indent: f32, marker: string, quote: bool) {
+append_markdown_blocks :: proc(
+	node: ^commonmark.Node,
+	layout: ^DocumentLayout,
+	options: RenderOptions,
+	indent: f32,
+	marker: string,
+	quote: bool,
+) {
 	kind := commonmark.node_get_type(node)
 	#partial switch kind {
 	case .Document, .Item:
 		first := true
-		for child := commonmark.node_first_child(node); child != nil; child = commonmark.node_next(child) {
-			append_markdown_blocks(child, layout, options, indent + (first ? 0 : (len(marker) > 0 ? 24 : 0)), first ? marker : "", quote)
+		for child := commonmark.node_first_child(node);
+		    child != nil;
+		    child = commonmark.node_next(child) {
+			append_markdown_blocks(
+				child,
+				layout,
+				options,
+				indent + (first ? 0 : (len(marker) > 0 ? 24 : 0)),
+				first ? marker : "",
+				quote,
+			)
 			first = false
 		}
 		return
 	case .List:
 		ordered := commonmark.node_get_list_type(node) == .Ordered
 		number := int(commonmark.node_get_list_start(node))
-		for item := commonmark.node_first_child(node); item != nil; item = commonmark.node_next(item) {
+		for item := commonmark.node_first_child(node);
+		    item != nil;
+		    item = commonmark.node_next(item) {
 			label := ordered ? fmt.tprintf("%d.", number) : "•"
-			append_markdown_blocks(item, layout, options, indent + (len(marker) > 0 ? 24 : 0), label, quote)
+			append_markdown_blocks(
+				item,
+				layout,
+				options,
+				indent + (len(marker) > 0 ? 24 : 0),
+				label,
+				quote,
+			)
 			number += 1
 		}
 		return
 	case .Block_Quote:
-		for child := commonmark.node_first_child(node); child != nil; child = commonmark.node_next(child) {
+		for child := commonmark.node_first_child(node);
+		    child != nil;
+		    child = commonmark.node_next(child) {
 			append_markdown_blocks(child, layout, options, indent + 12, marker, true)
 		}
 		return
 	}
 
-	block := RenderBlock{font_size = 15, line_height = 24, indent = indent, marker = marker, quote = quote, spacing = 12, node = node, source_line = int(commonmark.node_get_start_line(node)), source_end_line = int(commonmark.node_get_end_line(node))}
+	block := RenderBlock {
+		font_size       = 15,
+		line_height     = 24,
+		indent          = indent,
+		marker          = marker,
+		quote           = quote,
+		spacing         = 12,
+		node            = node,
+		source_line     = int(commonmark.node_get_start_line(node)),
+		source_end_line = int(commonmark.node_get_end_line(node)),
+	}
 	spans := make([dynamic]TextSpan, context.temp_allocator)
 	#partial switch kind {
 	case .Heading:
@@ -191,20 +310,42 @@ append_markdown_blocks :: proc(node: ^commonmark.Node, layout: ^DocumentLayout, 
 	case:
 		return
 	}
-	width := max(1, options.width - indent - block.padding * 2 - (quote ? 10 : 0) - (len(marker) > 0 ? 24 : 0))
+	width := max(
+		1,
+		options.width - indent - block.padding * 2 - (quote ? 10 : 0) - (len(marker) > 0 ? 24 : 0),
+	)
 	block.lines = wrap_inline(spans[:], width, block.font_size, options, block.code)
-	block.height = f32(len(block.lines)) * block.line_height + block.top_padding + block.bottom_padding + block.spacing
+	block.height =
+		f32(len(block.lines)) * block.line_height +
+		block.top_padding +
+		block.bottom_padding +
+		block.spacing
 	append(&layout.blocks, block)
 	layout.height += block.height
 }
 
-collect_inline :: proc(node: ^commonmark.Node, spans: ^[dynamic]TextSpan, style: u16, color: clay.Color) {
+collect_inline :: proc(
+	node: ^commonmark.Node,
+	spans: ^[dynamic]TextSpan,
+	style: u16,
+	color: clay.Color,
+) {
 	style := style
 	color := color
 	kind := commonmark.node_get_type(node)
 	#partial switch kind {
 	case .Text, .Code, .HTML_Inline:
-		append(spans, TextSpan{text = string(commonmark.node_get_literal(node)), style = style, color = color, code = kind == .Code, source_line = int(commonmark.node_get_start_line(node)), source_column = int(commonmark.node_get_start_column(node))})
+		append(
+			spans,
+			TextSpan {
+				text = string(commonmark.node_get_literal(node)),
+				style = style,
+				color = color,
+				code = kind == .Code,
+				source_line = int(commonmark.node_get_start_line(node)),
+				source_column = int(commonmark.node_get_start_column(node)),
+			},
+		)
 		return
 	case .Soft_Break:
 		append(spans, TextSpan{text = " ", style = style, color = color})
@@ -221,7 +362,9 @@ collect_inline :: proc(node: ^commonmark.Node, spans: ^[dynamic]TextSpan, style:
 	case .Image:
 		append(spans, TextSpan{text = "[Image: ", color = theme.Gray_600})
 	}
-	for child := commonmark.node_first_child(node); child != nil; child = commonmark.node_next(child) {
+	for child := commonmark.node_first_child(node);
+	    child != nil;
+	    child = commonmark.node_next(child) {
 		collect_inline(child, spans, style, color)
 	}
 	if kind == .Image do append(spans, TextSpan{text = "]", color = theme.Gray_600})
@@ -229,12 +372,25 @@ collect_inline :: proc(node: ^commonmark.Node, spans: ^[dynamic]TextSpan, style:
 
 span_width :: proc(span: TextSpan, size: u16, options: RenderOptions) -> f32 {
 	if options.measure == nil do return f32(len(span.text)) * f32(size) * 0.55
-	config := clay.TextElementConfig{fontId = span.style, fontSize = size}
-	text := clay.StringSlice{length = i32(len(span.text)), chars = raw_data(span.text), baseChars = raw_data(span.text)}
+	config := clay.TextElementConfig {
+		fontId   = span.style,
+		fontSize = size,
+	}
+	text := clay.StringSlice {
+		length    = i32(len(span.text)),
+		chars     = raw_data(span.text),
+		baseChars = raw_data(span.text),
+	}
 	return options.measure(text, &config, options.user_data).width
 }
 
-wrap_inline :: proc(spans: []TextSpan, width: f32, size: u16, options: RenderOptions, preserve_space: bool) -> [dynamic]RenderLine {
+wrap_inline :: proc(
+	spans: []TextSpan,
+	width: f32,
+	size: u16,
+	options: RenderOptions,
+	preserve_space: bool,
+) -> [dynamic]RenderLine {
 	lines := make([dynamic]RenderLine, context.temp_allocator)
 	append(&lines, RenderLine{spans = make([dynamic]TextSpan, context.temp_allocator)})
 	x: f32
@@ -276,7 +432,10 @@ wrap_inline :: proc(spans: []TextSpan, width: f32, size: u16, options: RenderOpt
 					if cursor > start && span_width(part, size, options) > width {
 						part.text = piece.text[start:cursor]
 						append(&lines[len(lines) - 1].spans, part)
-						append(&lines, RenderLine{spans = make([dynamic]TextSpan, context.temp_allocator)})
+						append(
+							&lines,
+							RenderLine{spans = make([dynamic]TextSpan, context.temp_allocator)},
+						)
 						start = cursor
 						x = 0
 					}

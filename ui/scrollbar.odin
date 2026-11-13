@@ -102,6 +102,7 @@ scroll_update :: proc(
 Scrollbar :: proc(scroll_id: clay.ElementId, scroll: ^ScrollState) {
 	thumb_h, thumb_y := scrollbar_geometry(scroll)
 	if thumb_h <= 0 do return
+
 	if clay.UI(clay.ID("ScrollTrack", scroll_id.id))(
 	{
 		layout = {

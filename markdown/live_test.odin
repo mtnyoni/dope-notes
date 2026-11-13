@@ -1,6 +1,7 @@
 package markdown
 
 import "core:testing"
+import "core:fmt"
 import "core:unicode/utf8"
 import commonmark "vendor:commonmark"
 
@@ -103,4 +104,29 @@ list_code_fences_and_setext_spacing_keep_their_context :: proc(t: ^testing.T) {
 	layout = prepare_live_markdown_layout(other, {width = 300, measure = render_test_measure}, setext, 3)
 	testing.expect_value(t, layout.blocks[0].spacing, f32(12))
 	testing.expect_value(t, layout.blocks[0].font_size, u16(30))
+}
+
+@(test)
+selection_highlights_only_selected_visible_text :: proc(t: ^testing.T) {
+	text := "One éé word\nSecond **bold** line"
+	root := commonmark.parse_document_from_string(text, {})
+	defer commonmark.node_free(root)
+	directions := [2]bool{false, true}
+	for reversed in directions {
+		options := RenderOptions{width = 75, measure = render_test_measure, selection_start = 4, selection_end = 28}
+		if reversed {
+			options.selection_start, options.selection_end = options.selection_end, options.selection_start
+		}
+		layout := prepare_live_markdown_layout(root, options, text, 0)
+		selected := ""
+		for block in layout.blocks {
+			for line in block.lines {
+				for span in line.spans {
+					testing.expect(t, utf8.valid_string(span.text))
+					if span.selected do selected = fmt.tprintf("%s%s", selected, span.text)
+				}
+			}
+		}
+		testing.expect_value(t, selected, "éé wordSecond bold")
+	}
 }

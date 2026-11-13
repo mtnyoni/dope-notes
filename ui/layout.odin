@@ -24,7 +24,10 @@ UILayout :: proc(
 		},
 		backgroundColor = theme.Light.background,
 		cornerRadius = clay.CornerRadiusAll(maximized ? 0 : 12),
-		border = {color = theme.Light.border, width = {1, 1, 1, 1, 0}},
+		border = clay.BorderElementConfig {
+			width = clay.BorderWidth{left = 1, top = 1, right = 1, bottom = 1},
+			color = theme.Light.border,
+		},
 	},
 	) {
 		TitleBar(window, ui_assets)
@@ -42,9 +45,8 @@ UILayout :: proc(
 				layout = {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 					layoutDirection = .TopToBottom,
-					padding = {0, 8, 8, 8},
+					padding = clay.Padding{left = 4, right = 4, top = 0, bottom = 4},
 				},
-				cornerRadius = clay.CornerRadiusAll(8),
 			},
 			) {
 				if clay.UI(clay.ID("ContentPanel"))(
@@ -53,8 +55,12 @@ UILayout :: proc(
 						sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 						layoutDirection = .TopToBottom,
 					},
-					cornerRadius = clay.CornerRadiusAll(8),
+					cornerRadius = clay.CornerRadiusAll(4),
 					backgroundColor = theme.Light.surface,
+					border = clay.BorderElementConfig {
+						width = clay.BorderWidth{left = 1, top = 1, right = 1, bottom = 1},
+						color = theme.Light.border,
+					},
 				},
 				) {
 					EditorToolBar(ui_assets)
@@ -64,9 +70,8 @@ UILayout :: proc(
 						layout = {
 							sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 							layoutDirection = .LeftToRight,
-							padding = {8, 8, 8, 8},
+							padding = clay.PaddingAll(8),
 						},
-						cornerRadius = clay.CornerRadiusAll(16),
 					},
 					) {
 						DocumentView(ed, scroll_input, delta_seconds)

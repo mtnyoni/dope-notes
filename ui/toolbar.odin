@@ -4,8 +4,8 @@ import assets "../assets"
 import theme "../theme"
 import clay "shared:clay"
 
-TOOLBAR_HEIGHT :: 54
-TOOLBAR_BUTTON_SIZE :: 32
+TOOLBAR_HEIGHT :: 40
+TOOLBAR_BUTTON_SIZE :: 20
 
 EditorToolBar :: proc(ui_assets: ^assets.Manager) {
 	if clay.UI(clay.ID("EditorToolbar"))(
@@ -13,13 +13,21 @@ EditorToolBar :: proc(ui_assets: ^assets.Manager) {
 		layout = {
 			sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(TOOLBAR_HEIGHT)},
 			layoutDirection = .LeftToRight,
-			padding = {12, 12, 0, 0},
-			childAlignment = {y = .Center},
+			padding = clay.Padding{left = 12, right = 12, top = 0, bottom = 0},
+			childAlignment = clay.ChildAlignment{y = .Center},
 		},
-		border = {color = theme.Light.border, width = {0, 0, 0, 1, 0}},
+		border = clay.BorderElementConfig {
+			color = theme.Light.border,
+			width = clay.BorderWidth {
+				left = 0,
+				right = 0,
+				top = 0,
+				bottom = 1,
+				betweenChildren = 0,
+			},
+		},
 	},
 	) {
-		// Equal side groups keep formatting centered independently of the icons.
 		if clay.UI(clay.ID("ToolbarHistory"))(
 		{
 			layout = {
@@ -133,7 +141,7 @@ ToolbarImage :: proc(ui_assets: ^assets.Manager, icon: assets.Icon) {
 
 	if clay.UI()(
 	{
-		layout = {sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)}},
+		layout = {sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(12)}},
 		image = {imageData = rawptr(texture)},
 	},
 	) {}

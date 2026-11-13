@@ -27,7 +27,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 		layout = {
 			sizing = {width = clay.SizingFixed(250), height = clay.SizingGrow()},
 			layoutDirection = .LeftToRight,
-			padding = clay.PaddingAll(8),
+			padding = clay.Padding{top = 0, right = 4, left = 4, bottom = 4},
 		},
 		backgroundColor = theme.Light.background,
 	},
@@ -41,7 +41,11 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 				childAlignment = clay.ChildAlignment{y = clay.LayoutAlignmentY.Center},
 			},
 			backgroundColor = theme.Light.surface,
-			cornerRadius = clay.CornerRadiusAll(8),
+			border = clay.BorderElementConfig {
+				width = clay.BorderWidth{left = 1, top = 1, right = 1, bottom = 1},
+				color = theme.Light.border,
+			},
+			cornerRadius = clay.CornerRadiusAll(4),
 		},
 		) {
 			if clay.UI()(
@@ -51,7 +55,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 					padding = clay.PaddingAll(8),
 				},
 				backgroundColor = clay.Hovered() ? theme.Gray_100 : theme.White,
-				cornerRadius = clay.CornerRadiusAll(8),
+				cornerRadius = clay.CornerRadiusAll(4),
 			},
 			) {
 				clay.Text(
@@ -82,6 +86,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(32)},
 					padding = clay.PaddingAll(8),
 					layoutDirection = .LeftToRight,
+					childAlignment = clay.ChildAlignment{y = .Center},
 					childGap = 4,
 				},
 				backgroundColor = clay.Hovered() ? theme.Gray_100 : theme.White,
@@ -93,7 +98,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 					if clay.UI()(
 					{
 						layout = {
-							sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)},
+							sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(12)},
 						},
 						image = {imageData = rawptr(square_pen_icon)},
 					},
@@ -116,6 +121,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(32)},
 					padding = clay.PaddingAll(8),
 					layoutDirection = .LeftToRight,
+					childAlignment = clay.ChildAlignment{y = .Center},
 					childGap = 4,
 				},
 				backgroundColor = clay.Hovered() ? theme.Gray_100 : theme.White,
@@ -126,7 +132,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 					if clay.UI()(
 					{
 						layout = {
-							sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)},
+							sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(12)},
 						},
 						image = {imageData = rawptr(search_icon)},
 					},

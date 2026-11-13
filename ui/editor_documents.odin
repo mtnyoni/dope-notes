@@ -11,7 +11,11 @@ EditorDocuments :: struct {
 	editors: map[string]^EditorState,
 }
 
-editor_open_note :: proc(documents: ^EditorDocuments, note: ^markdown.NoteFile, face: ^font.Font) -> ^EditorState {
+editor_open_note :: proc(
+	documents: ^EditorDocuments,
+	note: ^markdown.NoteFile,
+	face: ^font.Font,
+) -> ^EditorState {
 	if note == nil do return nil
 	if ed, found := documents.editors[note.path]; found {
 		return ed
@@ -20,11 +24,11 @@ editor_open_note :: proc(documents: ^EditorDocuments, note: ^markdown.NoteFile, 
 
 	ed := new(EditorState)
 	ed^ = EditorState {
-		buf = buffer.make_gap_buffer(max(64, len(note.content))),
-		face = face,
-		focused = true,
+		buf            = buffer.make_gap_buffer(max(64, len(note.content))),
+		font           = face,
+		focused        = true,
 		markdown_dirty = true,
-		reveal_cursor = true,
+		reveal_cursor  = true,
 	}
 	buffer.insert(&ed.buf, 0, note.content)
 	buffer.shift_gap_to(&ed.buf, 0)
