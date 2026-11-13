@@ -24,6 +24,7 @@ editor_open_note :: proc(
 
 	ed := new(EditorState)
 	ed^ = EditorState {
+		note_path = note.path,
 		buf            = buffer.make_gap_buffer(max(64, len(note.content))),
 		font           = face,
 		focused        = true,

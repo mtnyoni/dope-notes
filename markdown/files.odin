@@ -56,6 +56,22 @@ get_notes :: proc(
 		defer os.file_info_slice_delete(files, allocator)
 		slice.sort_by(files, file_name_less)
 		for file in files {
+			if file.type == .Directory {
+				if strings.has_prefix(file.name, ".") do continue
+				children, child_err := os.read_all_directory_by_path(file.fullpath, allocator)
+				if child_err != nil do return notebooks, child_err
+				for child in children {
+					if child.type != .Regular do continue
+					ext := os.ext(child.name)
+					if !strings.equal_fold(ext, ".md") && !strings.equal_fold(ext, ".markdown") do continue
+					bytes, err := os.read_entire_file(child.fullpath, allocator)
+					if err != nil { os.file_info_slice_delete(children, allocator); return notebooks, err }
+					append(&notebook.notes, parse_note_file(child.name, child.fullpath, bytes, allocator))
+					delete(bytes, allocator)
+				}
+				os.file_info_slice_delete(children, allocator)
+				continue
+			}
 			if file.type != .Regular do continue
 			extension := os.ext(file.name)
 			if !strings.equal_fold(extension, ".md") && !strings.equal_fold(extension, ".markdown") do continue

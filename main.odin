@@ -2,6 +2,7 @@ package main
 
 import config "./appconfig"
 import state "./state"
+import media "./media"
 import assets "assets"
 import buffer "buffer"
 import "core:c"
@@ -125,6 +126,9 @@ main :: proc() {
 		return
 	}
 	defer sdl.DestroyRenderer(renderer)
+	image_media: media.Manager
+	if !media.init(&image_media, renderer) { fmt.eprintln("Could not initialize image loading"); return }
+	defer media.destroy(&image_media)
 
 	ui_assets, assets_ok := assets.load(renderer)
 	if !assets_ok do return
@@ -174,6 +178,11 @@ main :: proc() {
 	notebooks, notebook_err := markdown.get_notes(notes_dir)
 	if notebook_err != nil {
 		fmt.eprintln("Could not load notebooks:", notebook_err)
+		return
+	}
+	if err := markdown.migrate_note_folders(notebooks[:]); err != nil {
+		fmt.eprintln("Could not migrate note storage:", err)
+		markdown.free_notebooks(notebooks)
 		return
 	}
 	app_state := state.make_app_state(notebooks, "Default")
@@ -248,6 +257,7 @@ main :: proc() {
 				sync_requested = true
 				continue
 			}
+			editor_state.media = &image_media
 			ui.editor_handle_event(editor_state, &e)
 			#partial switch e.type {
 			case .MOUSE_WHEEL:

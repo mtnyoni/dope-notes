@@ -13,6 +13,9 @@ MeasureText :: #type proc "c" (
 ) -> clay.Dimensions
 
 RenderOptions :: struct {
+	load_image: LoadImage,
+	note_path: string,
+	image_user_data: rawptr,
 	width:                          f32,
 	measure:                        MeasureText,
 	user_data:                      rawptr,
@@ -37,6 +40,10 @@ RenderLine :: struct {
 	source_start, source_end: int,
 }
 RenderBlock :: struct {
+	image: bool,
+	image_resource: ImageResource,
+	image_alt: string,
+	image_width: f32,
 	math: bool,
 	formula: MathBox,
 	table, table_header: bool,
@@ -102,6 +109,10 @@ render_markdown_ast_to_clay :: proc(
 			cornerRadius = clay.CornerRadiusAll(4),
 		},
 		) {
+			if block.image {
+				render_image(block)
+				continue
+			}
 			if block.math {
 				render_math(block.formula)
 				continue
@@ -377,14 +388,13 @@ collect_inline :: proc(
 	case .Link:
 		color = theme.Cyan_700
 	case .Image:
-		append(spans, TextSpan{text = "[Image: ", color = theme.Gray_600})
+		return
 	}
 	for child := commonmark.node_first_child(node);
 	    child != nil;
 	    child = commonmark.node_next(child) {
 		collect_inline(child, spans, style, color)
 	}
-	if kind == .Image do append(spans, TextSpan{text = "]", color = theme.Gray_600})
 }
 
 span_width :: proc(span: TextSpan, size: u16, options: RenderOptions) -> f32 {

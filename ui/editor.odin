@@ -1,6 +1,7 @@
 package ui
 
 import buffer "../buffer"
+import media "../media"
 import font "../font"
 import markdown "../markdown"
 import theme "../theme"
@@ -23,6 +24,8 @@ EditorSelection :: struct {
 }
 
 EditorState :: struct {
+	note_path: string,
+	media: ^media.Manager,
 	markdown_ast:       ^commonmark.Node,
 	markdown_dirty:     bool,
 	buf:                buffer.GapBuffer,
@@ -77,6 +80,7 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 		return
 	}
 
+	if editor_handle_media_event(ed, e) do return
 	if !ed.focused do return
 	buf := &ed.buf
 	vertical := false
@@ -425,6 +429,9 @@ editor_cursor_line :: proc(lines: []EditorLine, cursor: int) -> int {
 
 editor_markdown_options :: proc(ed: ^EditorState) -> markdown.RenderOptions {
 	return {
+		load_image = media.load_image,
+		note_path = ed.note_path,
+		image_user_data = ed.media,
 		width = ed.content_width > 0 ? ed.content_width : 400,
 		measure = ed.font != nil ? clay_ui.measure_text : nil,
 		user_data = ed.font,

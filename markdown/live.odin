@@ -33,6 +33,7 @@ prepare_live_markdown_layout :: proc(
 	source_rows := source_lines(source)
 	tables := prepare_table_rows(source, source_rows[:], base, options)
 	formulae := prepare_math_rows(source, source_rows[:], base, options)
+	images := prepare_image_rows(root, options)
 	live := DocumentLayout {
 		blocks = make([dynamic]RenderBlock, context.temp_allocator),
 	}
@@ -62,8 +63,15 @@ prepare_live_markdown_layout :: proc(
 			}
 			continue
 		}
+		image_blocks, has_image := images[index]
+		if has_image {
+			for image in image_blocks {
+				append(&live.blocks, image)
+				live.height += image.height
+			}
+		}
 		in_list := original != nil && node_in_list(original.node)
-		if (index == active_line && !in_list) || (original == nil && row.start == row.end) {
+		if (index == active_line && !in_list && !has_image) || (original == nil && row.start == row.end) {
 			size: u16 = 15
 			height: f32 = 24
 			style: u16

@@ -22,10 +22,11 @@ create_note :: proc(app: ^AppState) -> os.Error {
 	name, path: string
 	for {
 		name = fmt.tprintf("Untitled-%d.md", index)
-		path = fmt.tprintf("%s/%s", notebook.path, name)
-		if !os.exists(path) do break
+		path = fmt.tprintf("%s/Untitled-%d/%s", notebook.path, index, name)
+		if !os.exists(fmt.tprintf("%s/Untitled-%d", notebook.path, index)) && !os.exists(fmt.tprintf("%s/%s", notebook.path, name)) do break
 		index += 1
 	}
+	if err := os.make_directory_all(fmt.tprintf("%s/attachments", os.dir(path))); err != nil do return err
 	if err := os.write_entire_file(path, ""); err != nil do return err
 	note := markdown.parse_note_file(name, path, nil)
 	append(&notebook.notes, note)
