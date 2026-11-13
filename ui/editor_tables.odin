@@ -58,6 +58,8 @@ editor_handle_table_event :: proc(ed: ^EditorState, event: ^sdl.Event) -> bool {
 			case sdl.K_BACKSPACE:
 				if !editor_delete_selection(ed) && ed.cursor > cell.source_start {
 					previous := max(cell.source_start, buffer.prev_rune_start(&ed.buf, ed.cursor))
+					text := editor_text(ed)
+					if previous > cell.source_start && text[previous] == '|' && text[previous-1] == '\\' do previous -= 1
 					buffer.remove(&ed.buf, previous, ed.cursor-previous)
 					ed.cursor = previous
 					ed.markdown_dirty = true
@@ -65,6 +67,8 @@ editor_handle_table_event :: proc(ed: ^EditorState, event: ^sdl.Event) -> bool {
 			case sdl.K_DELETE:
 				if !editor_delete_selection(ed) && ed.cursor < cell.source_end {
 					next := min(cell.source_end, buffer.next_rune_end(&ed.buf, ed.cursor))
+					text := editor_text(ed)
+					if text[ed.cursor] == '\\' && next < cell.source_end && (text[next] == '|' || text[next] == '\\') do next += 1
 					buffer.remove(&ed.buf, ed.cursor, next-ed.cursor)
 					ed.markdown_dirty = true
 				}
@@ -83,6 +87,7 @@ editor_insert_cell_text :: proc(ed: ^EditorState, value: string) {
 	text, _ := strings.replace_all(value, "\r\n", " ", context.temp_allocator)
 	text, _ = strings.replace_all(text, "\n", " ", context.temp_allocator)
 	text, _ = strings.replace_all(text, "\r", " ", context.temp_allocator)
+	text, _ = strings.replace_all(text, "\\", "\\\\", context.temp_allocator)
 	text, _ = strings.replace_all(text, "|", "\\|", context.temp_allocator)
 	buffer.insert(&ed.buf, ed.cursor, text)
 	ed.cursor += len(text)

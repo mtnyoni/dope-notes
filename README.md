@@ -2,7 +2,7 @@
 
 A desktop notes editor built with Odin, SDL3, Clay, and FreeType. It includes a gap-buffer editor, note selection, Unicode text input, line wrapping, and mouse-wheel scrolling.
 
-Display equations use `$$` delimiters, either on their own lines or around a single-line equation. The built-in renderer supports fractions (`\frac{1}{2}`), superscripts (`v^2`), subscripts (`x_{1}`), grouped expressions, common Greek letters such as `\rho`, and literal text (`\text{constant}`). The preview updates while the active source line remains editable. This is a subset of LaTeX notation; unsupported commands remain visible as text. Math inside fenced code blocks is left unchanged.
+Display equations use `$$` delimiters, either on their own lines or around a single-line equation. The built-in renderer supports fractions (`\frac{1}{2}`), superscripts (`v^2`), subscripts (`x_{1}`), grouped expressions, common Greek letters such as `\rho`, and literal text (`\text{constant}`). Click the rendered equation to edit it directly. Arrow keys navigate symbols; fractions and superscripts retain their layout while editing. Enter moves to a paragraph after the equation. This is a subset of LaTeX notation; unsupported commands remain visible as text. Math inside fenced code blocks is left unchanged.
 
 The focused note is saved to its Markdown file about once per second when its content changes, and also when switching notes or closing the app. Per-note cursor and scroll positions remain in memory.
 

@@ -101,6 +101,7 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 		ed.selection_dragging = false
 	}
 
+	if editor_handle_formula_event(ed, e) do return
 	if editor_handle_table_event(ed, e) do return
 	if editor_handle_media_event(ed, e) do return
 	if !ed.focused do return
@@ -290,6 +291,10 @@ editor_pick_cursor :: proc(ed: ^EditorState, mouse: clay.Vector2, dragging := fa
 		if y < top + block.height {
 			source_row := rows[clamp(block.source_line - 1, 0, len(rows) - 1)]
 			position = source_row.start
+			if block.math {
+				position = markdown.math_pick_cursor(block, x, y-top, ed.content_width)
+				break
+			}
 			if block.table {
 				position = markdown.table_pick_cursor(block, x, y-top, editor_markdown_options(ed))
 				break
@@ -361,6 +366,12 @@ editor_pick_cursor :: proc(ed: ^EditorState, mouse: clay.Vector2, dragging := fa
 
 	for position > 0 && position < len(prepared.text) && (prepared.text[position] & 0xC0) == 0x80 do position -= 1
 	if dragging {
+		for block in prepared.rendered.blocks {
+			if block.math && ed.selection.start >= block.formula_source_start && ed.selection.start <= block.formula_source_end {
+				position = clamp(position, block.formula_source_start, block.formula_source_end)
+				break
+			}
+		}
 		if cell, found := editor_table_cell_at(prepared.rendered, ed.selection.start); found {
 			position = clamp(position, cell.source_start, cell.source_end)
 		}
@@ -409,6 +420,11 @@ editor_prepare_layout :: proc(ed: ^EditorState) -> EditorTextLayout {
 	prepared.caret_top = -1
 	y: f32
 	for block in prepared.rendered.blocks {
+		if block.math && ed.cursor >= block.formula_source_start && ed.cursor <= block.formula_source_end {
+			_, caret_y, height := markdown.math_caret(block, ed.cursor)
+			prepared.caret_top = y+(block.height-block.formula.height)/2+caret_y
+			prepared.caret_height = height
+		}
 		if block.table {
 			for cell in block.table_cells {
 				for row, i in cell.lines {

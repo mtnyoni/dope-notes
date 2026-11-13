@@ -20,15 +20,15 @@ display_equation_renders_fraction_greek_scripts_and_text :: proc(t: ^testing.T) 
 		fraction = fraction || glyph.rule
 		greek = greek || glyph.text == "ρ"
 		raised = raised || (glyph.text == "2" && glyph.size < 20 && glyph.y < block.formula.baseline-15)
-		literal = literal || glyph.text == "constant"
+		literal = literal || glyph.text == "c"
 		testing.expect(t, glyph.x >= 0 && glyph.y >= 0)
 		testing.expect(t, glyph.x+glyph.width <= block.formula.width+0.01)
 		testing.expect(t, glyph.y+glyph.height <= block.formula.height+0.01)
 	}
 	testing.expect(t, fraction && greek && raised && literal)
 	editing := prepare_live_markdown_layout(root, options, text, 1)
-	testing.expect_value(t, len(editing.blocks), 2)
-	testing.expect(t, editing.blocks[0].math && editing.blocks[1].active)
+	testing.expect_value(t, len(editing.blocks), 1)
+	testing.expect(t, editing.blocks[0].math)
 }
 
 @(test)

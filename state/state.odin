@@ -30,6 +30,10 @@ create_note :: proc(app: ^AppState) -> os.Error {
 	if err := os.write_entire_file(path, ""); err != nil do return err
 	note := markdown.parse_note_file(name, path, nil)
 	append(&notebook.notes, note)
+	for index := len(notebook.notes)-1; index > 0; index -= 1 {
+		notebook.notes[index] = notebook.notes[index-1]
+	}
+	notebook.notes[0] = note
 	app.current_doc = note.path
 	return nil
 }

@@ -49,11 +49,7 @@ prepare_live_markdown_layout :: proc(
 				append(&live.blocks, formula)
 				live.height += formula.height
 			}
-			if index == active_line {
-				block := raw_source_block(source, row, line_number, options)
-				append(&live.blocks, block)
-				live.height += block.height
-			}
+
 			continue
 		}
 		if table, found := tables[index]; found {

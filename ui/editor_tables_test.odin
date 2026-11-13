@@ -114,3 +114,19 @@ editor_table_mouse_test :: proc(t: ^testing.T) {
 	testing.expect(t, prepared.rendered.blocks[1].table)
 	testing.expect(t, strings.contains(editor_text(&ed), "| aNew | active |"))
 }
+
+@(test)
+deleting_escaped_pipe_preserves_table_columns :: proc(t: ^testing.T) {
+	ed := EditorState{buf = buffer.make_gap_buffer(128), focused = true, content_width = 400}
+	defer editor_destroy_state(&ed)
+	buffer.insert(&ed.buf, 0, "| A | B |\n| --- | --- |\n|x\\||y|")
+	layout := editor_table_layout(&ed)
+	ed.cursor = layout.blocks[1].table_cells[0].source_end
+	e := sdl.Event{}
+	e.type = .KEY_DOWN
+	e.key.key = sdl.K_BACKSPACE
+	editor_handle_event(&ed, &e)
+	testing.expect(t, strings.has_suffix(editor_text(&ed), "|x|y|"))
+	layout = editor_table_layout(&ed)
+	testing.expect_value(t, len(layout.blocks[1].table_cells), 2)
+}

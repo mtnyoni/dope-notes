@@ -46,6 +46,7 @@ RenderBlock :: struct {
 	image_width: f32,
 	math: bool,
 	formula: MathBox,
+	formula_source_start, formula_source_end: int,
 	table, table_header: bool,
 	table_cells: [dynamic]TableCell,
 	lines:                        [dynamic]RenderLine,
@@ -114,7 +115,7 @@ render_markdown_ast_to_clay :: proc(
 				continue
 			}
 			if block.math {
-				render_math(block.formula)
+				render_math(block, options)
 				continue
 			}
 			if block.table {

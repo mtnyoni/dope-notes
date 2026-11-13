@@ -6,6 +6,8 @@ import clay "shared:clay"
 
 MathGlyph :: struct {
 	text: string,
+	source_start, source_end: int,
+	mapped: bool,
 	x, y, width, height: f32,
 	size: u16,
 	style: u16,
@@ -21,7 +23,8 @@ MathParser :: struct {
 	options: RenderOptions,
 }
 
-render_math :: proc(box: MathBox) {
+render_math :: proc(block: RenderBlock, options: RenderOptions) {
+	box := block.formula
 	if clay.UI()({layout = {
 		sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 		childAlignment = {x = .Center, y = .Center},
@@ -31,10 +34,18 @@ render_math :: proc(box: MathBox) {
 				if clay.UI()({
 					layout = {sizing = {width = clay.SizingFixed(glyph.width), height = clay.SizingFixed(glyph.height)}},
 					floating = {attachTo = .Parent, offset = {glyph.x, glyph.y}, pointerCaptureMode = .Passthrough},
-					backgroundColor = glyph.rule ? theme.Light.text : clay.Color{},
+					backgroundColor = glyph.rule ? theme.Light.text : ((glyph.source_end > min(options.selection_start, options.selection_end) && glyph.source_start < max(options.selection_start, options.selection_end)) ? theme.Light.selection : clay.Color{}),
 				}) {
 					if !glyph.rule do clay.Text(glyph.text, {fontSize = glyph.size, fontId = glyph.style, textColor = theme.Light.text, wrapMode = .None})
 				}
+			}
+			if options.show_caret && options.cursor >= block.formula_source_start && options.cursor <= block.formula_source_end {
+				x, y, height := math_caret(block, options.cursor)
+				if clay.UI(clay.ID("Caret"))({
+					layout = {sizing = {width = clay.SizingFixed(2), height = clay.SizingFixed(height)}},
+					floating = {attachTo = .Parent, offset = {x, y}, zIndex = 1, pointerCaptureMode = .Passthrough},
+					backgroundColor = theme.Light.text,
+				}) {}
 			}
 		}
 	}
@@ -52,20 +63,33 @@ prepare_math_rows :: proc(source: string, rows: []SourceLine, base: DocumentLayo
 		if in_code do continue
 		end := index
 		formula := ""
-		if len(line) > 4 && strings.has_suffix(line, "$$") {
+		start_offset := rows[index].start+strings.index(source[rows[index].start:rows[index].end], line)+2
+		if len(line) >= 4 && strings.has_suffix(line, "$$") {
 			formula = line[2:len(line)-2]
 		} else if line == "$$" {
 			end = index+1
 			for end < len(rows) && strings.trim_space(source[rows[end].start:rows[end].end]) != "$$" do end += 1
 			if end >= len(rows) do continue
-			formula = source[rows[index].end:rows[end].start]
+			start_offset = rows[index].end+1
+			formula = source[start_offset:rows[end].start]
 		} else { continue }
+		untrimmed_start := start_offset
+		for len(formula) > 0 && (formula[0] == '\n' || formula[0] == '\r' || formula[0] == ' ') { formula = formula[1:]; start_offset += 1 }
+		formula = strings.trim_right(formula, "\r\n ")
+		if len(formula) == 0 do start_offset = untrimmed_start
 		parser := MathParser{text = formula, options = options}
 		box := math_sequence(&parser, 20, false)
+		if len(box.glyphs) == 0 do box = math_text("", 20, options, 0)
+		for &glyph in box.glyphs {
+			glyph.source_start += start_offset
+			glyph.source_end += start_offset
+		}
 		for row in index..=end {
 			block := RenderBlock{math = true, source_line = row+1, source_end_line = end+1}
 			if row == index {
 				block.formula = box
+				block.formula_source_start = start_offset
+				block.formula_source_end = start_offset+len(formula)
 				block.height = max(32, box.height)+16
 			}
 			result[row] = block
@@ -114,6 +138,23 @@ math_sequence :: proc(parser: ^MathParser, size: u16, grouped: bool) -> MathBox 
 }
 
 math_atom :: proc(parser: ^MathParser, size: u16) -> MathBox {
+	start := parser.at
+	box := math_parse_atom(parser, size)
+	if len(box.glyphs) == 0 {
+		position := parser.at
+		if position > start && parser.text[position-1] == '}' do position -= 1
+		box = math_text("", size, parser.options, position)
+	}
+	for &glyph in box.glyphs {
+		if !glyph.rule && !glyph.mapped {
+			glyph.source_start, glyph.source_end = start, parser.at
+			glyph.mapped = true
+		}
+	}
+	return box
+}
+
+math_parse_atom :: proc(parser: ^MathParser, size: u16) -> MathBox {
 	if parser.at >= len(parser.text) do return math_text("", size, parser.options)
 	start := parser.at
 	parser.at += 1
@@ -156,7 +197,7 @@ math_atom :: proc(parser: ^MathParser, size: u16) -> MathBox {
 				}
 				text := parser.text[begin:parser.at]
 				if parser.at < len(parser.text) do parser.at += 1
-				return math_text(text, size, parser.options)
+				return math_text(text, size, parser.options, begin)
 			}
 		}
 		symbol := command
@@ -199,11 +240,20 @@ math_skip_space :: proc(parser: ^MathParser) {
 	for parser.at < len(parser.text) && (parser.text[parser.at] == ' ' || parser.text[parser.at] == '\n' || parser.text[parser.at] == '\r') do parser.at += 1
 }
 
-math_text :: proc(text: string, size: u16, options: RenderOptions) -> MathBox {
-	width := span_width(TextSpan{text = text}, size, options)
+math_text :: proc(text: string, size: u16, options: RenderOptions, source_start := -1) -> MathBox {
 	height := f32(size)*1.3
-	box := MathBox{width = width, height = height, baseline = f32(size), glyphs = make([dynamic]MathGlyph, context.temp_allocator)}
-	append(&box.glyphs, MathGlyph{text = text, width = width, height = height, size = size})
+	box := MathBox{height = height, baseline = f32(size), glyphs = make([dynamic]MathGlyph, context.temp_allocator)}
+	at := 0
+	for at < len(text) || (at == 0 && len(text) == 0) {
+		next := min(at+1, len(text))
+		for next < len(text) && (text[next]&0xC0) == 0x80 do next += 1
+		part := text[at:next]
+		width := span_width(TextSpan{text = part}, size, options)
+		append(&box.glyphs, MathGlyph{text = part, x = box.width, width = width, height = height, size = size, mapped = source_start >= 0, source_start = max(0, source_start)+at, source_end = max(0, source_start)+next})
+		box.width += width
+		if next == at do break
+		at = next
+	}
 	return box
 }
 
@@ -214,4 +264,43 @@ math_place :: proc(target: ^MathBox, child: MathBox, x, y: f32) {
 		copy.y += y
 		append(&target.glyphs, copy)
 	}
+}
+
+math_caret :: proc(block: RenderBlock, position: int) -> (x, y, height: f32) {
+	height = 20
+	best := 0x7fffffff
+	for glyph in block.formula.glyphs {
+		if glyph.rule do continue
+		for side in 0..<2 {
+			offset := side == 0 ? glyph.source_start : glyph.source_end
+			distance := abs(position-offset)
+			if distance < best {
+				best = distance
+				x = glyph.x+(side == 0 ? 0 : glyph.width)
+				y = glyph.y
+				height = f32(glyph.size)
+			}
+		}
+	}
+	return
+}
+
+math_pick_cursor :: proc(block: RenderBlock, x, y, width: f32) -> int {
+	local_x := x-max(0, (width-block.formula.width)/2)
+	local_y := y-(block.height-block.formula.height)/2
+	best: f32 = 1e30
+	position := block.formula_source_start
+	for glyph in block.formula.glyphs {
+		if glyph.rule do continue
+		for side in 0..<2 {
+			x := glyph.x+(side == 0 ? 0 : glyph.width)
+			y := clamp(local_y, glyph.y, glyph.y+glyph.height)
+			distance := (local_x-x)*(local_x-x)+(local_y-y)*(local_y-y)
+			if distance < best {
+				best = distance
+				position = side == 0 ? glyph.source_start : glyph.source_end
+			}
+		}
+	}
+	return clamp(position, block.formula_source_start, block.formula_source_end)
 }
