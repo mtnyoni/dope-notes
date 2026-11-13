@@ -69,7 +69,9 @@ load_image :: proc(source, note_path: string, user_data: rawptr) -> markdown.Ima
 		entry = new(Entry)
 		manager.entries[strings.clone(path)] = entry
 		if remote && !os.exists(path) {
-			if err := os.make_directory_all(os.dir(path)); err != nil { entry.failed = true; return {} }
+			if !os.is_directory(os.dir(path)) {
+				if err := os.make_directory_all(os.dir(path)); err != nil { entry.failed = true; return {} }
+			}
 			job := new(Download)
 			job.url = strings.clone(source)
 			job.path = strings.clone(path)
@@ -120,7 +122,9 @@ save_bytes :: proc(note_path: string, bytes: []u8) -> (relative: string, ok: boo
 save_surface :: proc(note_path: string, surface: ^sdl.Surface) -> (relative: string, ok: bool) {
 	if note_path == "" do return
 	directory := fmt.tprintf("%s/attachments", os.dir(note_path))
-	if err := os.make_directory_all(directory); err != nil do return
+	if !os.is_directory(directory) {
+		if err := os.make_directory_all(directory); err != nil { fmt.eprintln("Could not create attachments:", err); return }
+	}
 	index := 1
 	path := ""
 	for {

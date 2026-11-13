@@ -18,6 +18,14 @@ editor_handle_media_event :: proc(ed: ^EditorState, event: ^sdl.Event) -> bool {
 		} else { fmt.eprintln("Could not attach dropped image:", event.drop.data) }
 		return true
 	}
+	if event.type == .DROP_TEXT && event.drop.data != nil {
+		value := strings.trim_space(string(event.drop.data))
+		if strings.has_prefix(value, "https://") || strings.has_prefix(value, "http://") {
+			editor_pick_cursor(ed, {event.drop.x, event.drop.y})
+			editor_insert_image(ed, value)
+			return true
+		}
+	}
 	if !ed.focused || event.type != .KEY_DOWN || event.key.key != sdl.K_V || !(sdl.KMOD_CTRL & event.key.mod != {} || sdl.KMOD_GUI & event.key.mod != {}) do return false
 	mimes := [3]cstring{"image/png", "image/jpeg", "image/bmp"}
 	for mime in mimes {

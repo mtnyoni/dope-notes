@@ -29,7 +29,7 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 			layoutDirection = .LeftToRight,
 			padding = clay.Padding{top = 0, right = 4, left = 4, bottom = 4},
 		},
-		backgroundColor = theme.Light.background,
+		backgroundColor = theme.White,
 	},
 	) {
 		if clay.UI(clay.ID("SidebarPanel"))(

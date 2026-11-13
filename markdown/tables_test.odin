@@ -24,10 +24,10 @@ table_renders_headers_bold_cells_and_alignment :: proc(t: ^testing.T) {
 	span := layout.blocks[1].table_cells[0].lines[0].spans[0]
 	testing.expect_value(t, span.text, "Apex9")
 	testing.expect(t, span.style & 1 != 0)
-	// Editing a table row exposes just that row's source and retains the grid.
+	// Editing a table row keeps the entire grid formatted.
 	editing := prepare_live_markdown_layout(root, {width = 600}, text, 2)
 	testing.expect_value(t, len(editing.blocks), 4)
-	testing.expect(t, editing.blocks[1].active && !editing.blocks[1].table)
+	testing.expect(t, editing.blocks[1].active && editing.blocks[1].table)
 	testing.expect(t, editing.blocks[0].table && editing.blocks[2].table)
 }
 
@@ -51,7 +51,7 @@ table_handles_empty_cells_escaped_pipes_and_wrapping :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(layout.blocks), 3)
 	if len(layout.blocks) != 3 do return
 	testing.expect_value(t, len(layout.blocks[1].table_cells), 2)
-	testing.expect_value(t, len(layout.blocks[1].table_cells[1].lines[0].spans), 0)
+	testing.expect_value(t, len(layout.blocks[1].table_cells[1].lines[0].spans), 1)
 	testing.expect(t, len(layout.blocks[2].table_cells[0].lines) > 1)
 	testing.expect(t, layout.blocks[2].height > 40)
 }

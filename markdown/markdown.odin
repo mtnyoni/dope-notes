@@ -118,7 +118,7 @@ render_markdown_ast_to_clay :: proc(
 				continue
 			}
 			if block.table {
-				render_table_row(block)
+				render_table_row(block, options)
 				continue
 			}
 

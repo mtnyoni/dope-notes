@@ -83,5 +83,7 @@ sidebar_description_preserves_padding :: proc(t: ^testing.T) {
 	testing.expect(t, app_state.new_note_requested)
 	editor_mouse_scrolling_test(t)
 	editor_live_markdown_test(t)
+	editor_mouse_selection_test(t)
+	editor_table_mouse_test(t)
 
 }

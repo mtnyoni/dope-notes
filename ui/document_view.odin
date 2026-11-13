@@ -10,7 +10,7 @@ DocumentView :: proc(ed: ^EditorState, input: ScrollInput = {}, delta_seconds: f
 	if bounds.found do ed.scroll.view_height = max(0, bounds.boundingBox.height)
 	ed.scroll.content_height = max(ed.scroll.view_height, prepared.height)
 
-	if ed.reveal_cursor && prepared.caret_top >= 0 && bounds.found {
+	if ed.reveal_cursor && !ed.selection_dragging && prepared.caret_top >= 0 && bounds.found {
 		caret_top := EDITOR_PADDING + prepared.caret_top
 		caret_bottom := caret_top + prepared.caret_height
 		if caret_top < ed.scroll.target + EDITOR_PADDING {
@@ -24,7 +24,18 @@ DocumentView :: proc(ed: ^EditorState, input: ScrollInput = {}, delta_seconds: f
 		ed.reveal_cursor = false
 	}
 
+	if ed.selection_dragging && input.left_down && bounds.found {
+		top := bounds.boundingBox.y+12
+		bottom := bounds.boundingBox.y+bounds.boundingBox.height-12
+		if input.mouse.y < top do ed.scroll.target -= min(600, (top-input.mouse.y)*10)*delta_seconds
+		if input.mouse.y > bottom do ed.scroll.target += min(600, (input.mouse.y-bottom)*10)*delta_seconds
+	}
 	scroll_update(&ed.scroll, input, bounds.boundingBox, delta_seconds)
+	if ed.selection_dragging && input.left_down {
+		editor_pick_cursor(ed, input.mouse, true)
+		ed.selection.end = ed.cursor
+		ed.reveal_cursor = false
+	}
 	ed.first_visible_line = int(max(0, ed.scroll.offset - EDITOR_PADDING) / EDITOR_LINE_HEIGHT)
 	if data := clay.GetScrollContainerData(clay.ID(DOCUMENT_SCROLL_ID)); data.found {
 		data.scrollPosition.y = -ed.scroll.offset

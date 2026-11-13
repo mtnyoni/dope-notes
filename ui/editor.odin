@@ -39,6 +39,7 @@ EditorState :: struct {
 	scroll:             ScrollState,
 	reveal_cursor:      bool,
 	selection:          EditorSelection,
+	selection_dragging: bool,
 }
 
 EditorLine :: struct {
@@ -76,10 +77,31 @@ Editor :: proc(ed: ^EditorState, prepared: ^EditorTextLayout) {
 
 editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 	if e.type == .MOUSE_BUTTON_DOWN && e.button.button == sdl.BUTTON_LEFT {
-		editor_pick_cursor(ed, {e.button.x, e.button.y})
+		if editor_pick_cursor(ed, {e.button.x, e.button.y}) {
+			ed.selection = {start = ed.cursor, end = ed.cursor}
+			ed.selection_dragging = true
+			_ = sdl.CaptureMouse(true)
+		}
 		return
 	}
+	if e.type == .MOUSE_MOTION && ed.selection_dragging {
+		editor_pick_cursor(ed, {e.motion.x, e.motion.y}, true)
+		ed.selection.end = ed.cursor
+		return
+	}
+	if e.type == .MOUSE_BUTTON_UP && e.button.button == sdl.BUTTON_LEFT && ed.selection_dragging {
+		editor_pick_cursor(ed, {e.button.x, e.button.y}, true)
+		ed.selection.end = ed.cursor
+		ed.selection_dragging = false
+		_ = sdl.CaptureMouse(false)
+		return
+	}
+	if e.type == .WINDOW_FOCUS_LOST || e.type == .QUIT {
+		if ed.selection_dragging do _ = sdl.CaptureMouse(false)
+		ed.selection_dragging = false
+	}
 
+	if editor_handle_table_event(ed, e) do return
 	if editor_handle_media_event(ed, e) do return
 	if !ed.focused do return
 	buf := &ed.buf
@@ -88,6 +110,7 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 	#partial switch e.type {
 	case .TEXT_INPUT:
 		s := string(e.text.text)
+		editor_delete_selection(ed)
 		buffer.insert(buf, ed.cursor, s)
 		ed.cursor += len(s)
 		ed.markdown_dirty = true
@@ -107,6 +130,7 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 						defer sdl.free(text)
 
 						s := string(cstring(text))
+						editor_delete_selection(ed)
 						buffer.insert(&ed.buf, ed.cursor, s)
 						ed.cursor += len(s)
 						ed.markdown_dirty = true
@@ -126,6 +150,7 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 
 		switch e.key.key {
 		case sdl.K_RETURN, sdl.K_KP_ENTER:
+			editor_delete_selection(ed)
 			editor_insert_newline(ed)
 			ed.markdown_dirty = true
 
@@ -151,7 +176,9 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 			}
 
 		case sdl.K_DELETE:
-			if editor_merge_next_list_item(ed) {
+			if editor_delete_selection(ed) {
+				ed.markdown_dirty = true
+			} else if editor_merge_next_list_item(ed) {
 				ed.markdown_dirty = true
 			} else {
 				n := buffer.next_rune_end(buf, ed.cursor) - ed.cursor
@@ -160,6 +187,11 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 			}
 
 		case sdl.K_LEFT:
+			if ed.selection.start != ed.selection.end {
+				ed.cursor = min(ed.selection.start, ed.selection.end)
+				ed.selection = {}
+				break
+			}
 			prefix, row, in_list := editor_current_list(ed)
 			if in_list && ed.cursor == row.start+prefix.content_start && row.start > 0 {
 				ed.cursor = row.start-1
@@ -168,23 +200,32 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 			}
 
 		case sdl.K_RIGHT:
+			if ed.selection.start != ed.selection.end {
+				ed.cursor = max(ed.selection.start, ed.selection.end)
+				ed.selection = {}
+				break
+			}
 			ed.cursor = buffer.next_rune_end(buf, ed.cursor)
 
 		case sdl.K_HOME:
+			ed.selection = {}
 			text := editor_text(ed)
 			rows := markdown.source_lines(text)
 			ed.cursor = rows[editor_physical_line(text, ed.cursor)].start
 
 		case sdl.K_END:
+			ed.selection = {}
 			text := editor_text(ed)
 			rows := markdown.source_lines(text)
 			ed.cursor = rows[editor_physical_line(text, ed.cursor)].end
 
 		case sdl.K_UP:
+			ed.selection = {}
 			editor_move_vertical(ed, -1)
 			vertical = true
 
 		case sdl.K_DOWN:
+			ed.selection = {}
 			editor_move_vertical(ed, 1)
 			vertical = true
 		}
@@ -227,11 +268,17 @@ editor_move_vertical :: proc(ed: ^EditorState, direction: int) {
 	ed.cursor = best
 }
 
-editor_pick_cursor :: proc(ed: ^EditorState, mouse: clay.Vector2) {
+editor_pick_cursor :: proc(ed: ^EditorState, mouse: clay.Vector2, dragging := false) -> bool {
+	mouse := mouse
 	viewport := clay.GetElementData(clay.ID(DOCUMENT_SCROLL_ID))
 	bounds := clay.GetElementData(clay.ID(EDITOR_ID))
 
-	if !viewport.found || !bounds.found || !scroll_contains(viewport.boundingBox, mouse) || !scroll_contains(bounds.boundingBox, mouse) do return
+	if !viewport.found || !bounds.found do return false
+	if !dragging && (!scroll_contains(viewport.boundingBox, mouse) || !scroll_contains(bounds.boundingBox, mouse)) do return false
+	if dragging {
+		mouse.x = clamp(mouse.x, bounds.boundingBox.x, bounds.boundingBox.x+bounds.boundingBox.width)
+		mouse.y = clamp(mouse.y, viewport.boundingBox.y, viewport.boundingBox.y+viewport.boundingBox.height)
+	}
 
 	prepared := editor_prepare_layout(ed)
 	rows := markdown.source_lines(prepared.text)
@@ -243,6 +290,10 @@ editor_pick_cursor :: proc(ed: ^EditorState, mouse: clay.Vector2) {
 		if y < top + block.height {
 			source_row := rows[clamp(block.source_line - 1, 0, len(rows) - 1)]
 			position = source_row.start
+			if block.table {
+				position = markdown.table_pick_cursor(block, x, y-top, editor_markdown_options(ed))
+				break
+			}
 			blank_gap := false
 			if block.node != nil && block.spacing > 0 && y >= top + block.height - block.spacing {
 				next_index := int(commonmark.node_get_end_line(block.node))
@@ -309,12 +360,18 @@ editor_pick_cursor :: proc(ed: ^EditorState, mouse: clay.Vector2) {
 	}
 
 	for position > 0 && position < len(prepared.text) && (prepared.text[position] & 0xC0) == 0x80 do position -= 1
+	if dragging {
+		if cell, found := editor_table_cell_at(prepared.rendered, ed.selection.start); found {
+			position = clamp(position, cell.source_start, cell.source_end)
+		}
+	}
 	ed.cursor = position
 	editor_clamp_list_cursor(ed)
 	ed.focused = true
 	ed.has_preferred_x = false
 	ed.reveal_cursor = true
 	buffer.shift_gap_to(&ed.buf, ed.cursor)
+	return true
 }
 
 editor_prepare_layout :: proc(ed: ^EditorState) -> EditorTextLayout {
@@ -352,6 +409,17 @@ editor_prepare_layout :: proc(ed: ^EditorState) -> EditorTextLayout {
 	prepared.caret_top = -1
 	y: f32
 	for block in prepared.rendered.blocks {
+		if block.table {
+			for cell in block.table_cells {
+				for row, i in cell.lines {
+					if ed.cursor >= row.source_start && ed.cursor <= row.source_end {
+						_, caret_y, height := markdown.caret_geometry(block, row, editor_markdown_options(ed))
+						prepared.caret_top = y+8+f32(i)*block.line_height
+						prepared.caret_height = caret_y+height
+					}
+				}
+			}
+		}
 		if block.active {
 			for row, index in block.lines {
 				last := index == len(block.lines) - 1

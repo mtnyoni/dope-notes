@@ -9,8 +9,6 @@ import img "vendor:sdl3/image"
 
 @(test)
 imported_images_are_portable_and_never_overwrite :: proc(t: ^testing.T) {
-	assert(sdl.Init({}))
-	defer sdl.Quit()
 	root, err := os.make_directory_temp("", "dope-media-*", context.allocator)
 	assert(err == nil)
 	defer delete(root)
@@ -27,7 +25,6 @@ imported_images_are_portable_and_never_overwrite :: proc(t: ^testing.T) {
 	assert(read_err == nil)
 	defer delete(bytes)
 	second, bytes_ok := save_bytes(note, bytes)
-	if !bytes_ok do fmt.eprintln("Image decode:", sdl.GetError(), "bytes:", len(bytes))
 	testing.expect(t, bytes_ok)
 	testing.expect_value(t, second, "attachments/image-2.png")
 	third, file_ok := save_file(note, fmt.tprintf("%s/%s", root, second))
@@ -41,5 +38,39 @@ imported_images_are_portable_and_never_overwrite :: proc(t: ^testing.T) {
 		testing.expect_value(t, loaded.w, 4)
 		testing.expect_value(t, loaded.h, 3)
 		sdl.DestroySurface(loaded)
+	}
+}
+
+@(test)
+remote_image_download_is_cached_next_to_note :: proc(t: ^testing.T) {
+	url := os.get_env("DOPE_NOTES_TEST_IMAGE_URL", context.temp_allocator)
+	if url == "" do return
+	root, err := os.make_directory_temp("", "dope-remote-image-*", context.allocator)
+	assert(err == nil)
+	defer delete(root)
+	defer os.remove_all(root)
+	manager: Manager
+	assert(init(&manager, nil))
+	defer destroy(&manager)
+	resource := load_image(url, fmt.tprintf("%s/note.md", root), &manager)
+	testing.expect(t, resource.loading)
+	for path, entry in manager.entries {
+		testing.expect(t, entry.job != nil)
+		if entry.job == nil do continue
+		done, ok := false, false
+		for _ in 0..<200 {
+			sdl.LockMutex(entry.job.mutex)
+			done, ok = entry.job.done, entry.job.ok
+			sdl.UnlockMutex(entry.job.mutex)
+			if done do break
+			sdl.Delay(20)
+		}
+		testing.expect(t, done && ok && os.exists(path))
+		testing.expect(t, strings.has_prefix(path, fmt.tprintf("%s/attachments/", root)))
+		if ok {
+			surface := img.Load(strings.clone_to_cstring(path, context.temp_allocator))
+			testing.expect(t, surface != nil)
+			if surface != nil do sdl.DestroySurface(surface)
+		}
 	}
 }

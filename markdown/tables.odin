@@ -58,6 +58,16 @@ prepare_table_rows :: proc(source: string, rows: []SourceLine, base: DocumentLay
 				}
 				commonmark.node_free(root)
 				lines := wrap_inline(spans[:], max(1, width-16), 15, options, false)
+				if len(spans) == 0 {
+					append(&lines[0].spans, TextSpan{text = "", source_line = index+1, source_column = range.start-rows[index].start+1, color = theme.Light.text})
+				}
+				for &line, i in lines {
+					line.source_base = rows[index].start
+					line.source_start = range.start
+					if i > 0 && len(line.spans) > 0 do line.source_start = rows[index].start+line.spans[0].source_column-1
+					line.source_end = range.end
+					if i > 0 do lines[i-1].source_end = line.source_start
+				}
 				append(&block.table_cells, TableCell{lines = lines, width = width, alignment = alignments[column], source_start = range.start, source_end = range.end})
 				block.height = max(block.height, f32(len(lines))*24+16)
 			}
@@ -92,7 +102,8 @@ table_cells :: proc(source: string, row: SourceLine) -> [dynamic]SourceLine {
 	return cells
 }
 
-render_table_row :: proc(block: RenderBlock) {
+render_table_row :: proc(block: RenderBlock, options: RenderOptions) {
+	caret_drawn := false
 	for cell in block.table_cells {
 		if clay.UI()({
 			layout = {
@@ -104,15 +115,69 @@ render_table_row :: proc(block: RenderBlock) {
 			clip = {horizontal = true},
 			border = {color = theme.Light.border, width = clay.BorderAll(1)},
 		}) {
-			for line in cell.lines {
+			for line, index in cell.lines {
 				if clay.UI()({layout = {
 					sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(block.line_height)},
 					layoutDirection = .LeftToRight,
 					childAlignment = {x = cell.alignment, y = .Center},
 				}}) {
-					for span in line.spans do clay.Text(span.text, {fontSize = block.font_size, fontId = span.style, textColor = span.color, wrapMode = .None})
+					for span in line.spans {
+						if clay.UI()({layout = {sizing = {width = clay.SizingFit(), height = clay.SizingFit()}}, backgroundColor = span.selected ? theme.Light.selection : clay.Color{}}) {
+							clay.Text(span.text, {fontSize = block.font_size, fontId = span.style, textColor = span.color, wrapMode = .None})
+						}
+					}
+					last := index == len(cell.lines)-1
+					if !caret_drawn && options.show_caret && options.cursor >= line.source_start && (options.cursor < line.source_end || (last && options.cursor == line.source_end)) {
+						caret_drawn = true
+						x, y, height := caret_geometry(block, line, options)
+						x += table_line_offset(cell, line, block.font_size, options)
+						if clay.UI(clay.ID("Caret"))({
+							layout = {sizing = {width = clay.SizingFixed(2), height = clay.SizingFixed(height)}},
+							floating = {attachTo = .Parent, offset = {x, y}, zIndex = 1, pointerCaptureMode = .Passthrough},
+							backgroundColor = theme.Light.text,
+						}) {}
+					}
 				}
 			}
 		}
 	}
+}
+
+// Return the inset used by centered or right-aligned cell text.
+table_line_offset :: proc(cell: TableCell, line: RenderLine, size: u16, options: RenderOptions) -> f32 {
+	width: f32
+	for span in line.spans do width += span_width(span, size, options)
+	remaining := max(0, cell.width-16-width)
+	if cell.alignment == .Center do return remaining/2
+	if cell.alignment == .Right do return remaining
+	return 0
+}
+
+table_pick_cursor :: proc(block: RenderBlock, x, y: f32, options: RenderOptions) -> int {
+	left: f32
+	for cell, column in block.table_cells {
+		if x <= left+cell.width || column == len(block.table_cells)-1 {
+			index := clamp(int((y-8)/block.line_height), 0, len(cell.lines)-1)
+			line := cell.lines[index]
+			remaining := x-left-8-table_line_offset(cell, line, block.font_size, options)
+			position := line.source_start
+			for span in line.spans {
+				start := line.source_base+span.source_column-1
+				for at := 0; at < len(span.text); {
+					next := at+1
+					for next < len(span.text) && (span.text[next]&0xC0) == 0x80 do next += 1
+					part := span
+					part.text = span.text[at:next]
+					width := span_width(part, block.font_size, options)
+					if remaining < width/2 do return clamp(start+at, cell.source_start, cell.source_end)
+					remaining -= width
+					position = start+next
+					at = next
+				}
+			}
+			return clamp(position, cell.source_start, cell.source_end)
+		}
+		left += cell.width
+	}
+	return 0
 }

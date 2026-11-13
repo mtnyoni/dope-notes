@@ -56,7 +56,8 @@ prepare_live_markdown_layout :: proc(
 			}
 			continue
 		}
-		if table, found := tables[index]; found && index != active_line {
+		if table, found := tables[index]; found {
+			table.active = index == active_line
 			if table.height > 0 {
 				append(&live.blocks, table)
 				live.height += table.height
@@ -209,7 +210,13 @@ apply_selection :: proc(layout: ^DocumentLayout, rows: []SourceLine, options: Re
 	if start == end do return
 
 	for &block in layout.blocks {
-		for &line in block.lines {
+		apply_line_selection(block.lines[:], rows, start, end)
+		for &cell in block.table_cells do apply_line_selection(cell.lines[:], rows, start, end)
+	}
+}
+
+apply_line_selection :: proc(lines: []RenderLine, rows: []SourceLine, start, end: int) {
+		for &line in lines {
 			spans := make([dynamic]TextSpan, context.temp_allocator)
 			for span in line.spans {
 				if span.source_line < 1 || span.source_line > len(rows) {
@@ -234,7 +241,6 @@ apply_selection :: proc(layout: ^DocumentLayout, rows: []SourceLine, options: Re
 			}
 			line.spans = spans
 		}
-	}
 }
 
 raw_source_block :: proc(

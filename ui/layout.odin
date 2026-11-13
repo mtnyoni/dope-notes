@@ -22,7 +22,7 @@ UILayout :: proc(
 			layoutDirection = .TopToBottom,
 			padding = clay.PaddingAll(maximized ? 0 : 4),
 		},
-		backgroundColor = theme.Light.background,
+		backgroundColor = theme.White,
 		cornerRadius = clay.CornerRadiusAll(maximized ? 0 : 12),
 		border = clay.BorderElementConfig {
 			width = clay.BorderWidth{left = 1, top = 1, right = 1, bottom = 1},
