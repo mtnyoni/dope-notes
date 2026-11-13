@@ -32,6 +32,7 @@ TextSpan :: struct {
 }
 
 RenderLine :: struct {
+	source_base: int,
 	spans:                    [dynamic]TextSpan,
 	source_start, source_end: int,
 }
@@ -239,6 +240,12 @@ append_markdown_blocks :: proc(
 	kind := commonmark.node_get_type(node)
 	#partial switch kind {
 	case .Document, .Item:
+		if kind == .Item && commonmark.node_first_child(node) == nil {
+			block := RenderBlock{node = node, marker = marker, indent = indent, font_size = 15, line_height = 24, height = 24, source_line = int(commonmark.node_get_start_line(node)), source_end_line = int(commonmark.node_get_end_line(node))}
+			append(&layout.blocks, block)
+			layout.height += block.height
+			return
+		}
 		first := true
 		for child := commonmark.node_first_child(node);
 		    child != nil;
@@ -464,14 +471,13 @@ wrap_inline :: proc(
 
 // Measure each styled span so selections do not change the caret position.
 caret_geometry :: proc(block: RenderBlock, line: RenderLine, options: RenderOptions) -> (x, y, height: f32) {
-	remaining := max(0, options.cursor - line.source_start)
 	for span in line.spans {
 		prefix := span
-		count := min(remaining, len(span.text))
+		start := line.source_base + max(0, span.source_column-1)
+		count := clamp(options.cursor-start, 0, len(span.text))
 		prefix.text = span.text[:count]
 		x += span_width(prefix, block.font_size, options)
-		remaining -= count
-		if remaining == 0 do break
+		if options.cursor < start+len(span.text) do break
 	}
 	height = f32(block.font_size)
 	y = max(0, (block.line_height - height) / 2)

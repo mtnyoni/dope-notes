@@ -62,7 +62,8 @@ prepare_live_markdown_layout :: proc(
 			}
 			continue
 		}
-		if index == active_line || (original == nil && row.start == row.end) {
+		in_list := original != nil && node_in_list(original.node)
+		if (index == active_line && !in_list) || (original == nil && row.start == row.end) {
 			size: u16 = 15
 			height: f32 = 24
 			style: u16
@@ -85,6 +86,7 @@ prepare_live_markdown_layout :: proc(
 		}
 		if original == nil do continue
 		block := original^
+		block.active = index == active_line
 		block.source_line = line_number
 		block.source_end_line = line_number
 		block.spacing = line_number == original.source_end_line && commonmark.node_get_type(original.node) != .Paragraph ? original.spacing : 0
@@ -143,7 +145,11 @@ prepare_live_markdown_layout :: proc(
 			for span in all {
 				if span.source_line == line_number do append(&spans, span)
 			}
-			if len(spans) == 0 do continue
+			if len(spans) == 0 {
+				if !in_list do continue
+				prefix := list_prefix(source[row.start:row.end])
+				append(&spans, TextSpan{text = "", source_line = line_number, source_column = prefix.content_start+1, color = theme.Light.text})
+			}
 		}
 		width := max(
 			1,
@@ -154,6 +160,14 @@ prepare_live_markdown_layout :: proc(
 			(len(block.marker) > 0 ? 24 : 0),
 		)
 		block.lines = wrap_inline(spans[:], width, block.font_size, options, block.code)
+		for &line, i in block.lines {
+			line.source_base = row.start
+			line.source_start = row.start
+			if len(line.spans) > 0 do line.source_start += max(0, line.spans[0].source_column-1)
+			line.source_end = row.end
+			if i > 0 do block.lines[i-1].source_end = line.source_start
+		}
+		if block.active && len(block.lines) > 0 do block.lines[0].source_start = min(options.cursor, block.lines[0].source_start)
 		block.height =
 			f32(len(block.lines)) * block.line_height +
 			block.top_padding +
@@ -276,5 +290,5 @@ append_raw_line :: proc(
 		},
 	)
 
-	append(&block.lines, RenderLine{spans = spans, source_start = start, source_end = end})
+	append(&block.lines, RenderLine{spans = spans, source_start = start, source_end = end, source_base = physical_start})
 }

@@ -122,8 +122,7 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 
 		switch e.key.key {
 		case sdl.K_RETURN, sdl.K_KP_ENTER:
-			buffer.insert(buf, ed.cursor, "\n")
-			ed.cursor += 1
+			editor_insert_newline(ed)
 			ed.markdown_dirty = true
 
 		case sdl.K_BACKSPACE:
@@ -136,6 +135,8 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 				ed.selection.start = start
 				ed.selection.end = start
 				ed.markdown_dirty = true
+			} else if editor_remove_list_prefix(ed) {
+				ed.markdown_dirty = true
 			} else if ed.cursor > 0 {
 				p := buffer.prev_rune_start(buf, ed.cursor)
 				buffer.remove(buf, p, ed.cursor - p)
@@ -146,12 +147,21 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 			}
 
 		case sdl.K_DELETE:
-			n := buffer.next_rune_end(buf, ed.cursor) - ed.cursor
-			buffer.remove(buf, ed.cursor, n)
-			if n > 0 do ed.markdown_dirty = true
+			if editor_merge_next_list_item(ed) {
+				ed.markdown_dirty = true
+			} else {
+				n := buffer.next_rune_end(buf, ed.cursor) - ed.cursor
+				buffer.remove(buf, ed.cursor, n)
+				if n > 0 do ed.markdown_dirty = true
+			}
 
 		case sdl.K_LEFT:
-			ed.cursor = buffer.prev_rune_start(buf, ed.cursor)
+			prefix, row, in_list := editor_current_list(ed)
+			if in_list && ed.cursor == row.start+prefix.content_start && row.start > 0 {
+				ed.cursor = row.start-1
+			} else {
+				ed.cursor = buffer.prev_rune_start(buf, ed.cursor)
+			}
 
 		case sdl.K_RIGHT:
 			ed.cursor = buffer.next_rune_end(buf, ed.cursor)
@@ -179,6 +189,7 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 	}
 
 	ed.reveal_cursor = true
+	editor_clamp_list_cursor(ed)
 	if !vertical do ed.has_preferred_x = false
 	buffer.shift_gap_to(buf, ed.cursor)
 }
@@ -295,6 +306,7 @@ editor_pick_cursor :: proc(ed: ^EditorState, mouse: clay.Vector2) {
 
 	for position > 0 && position < len(prepared.text) && (prepared.text[position] & 0xC0) == 0x80 do position -= 1
 	ed.cursor = position
+	editor_clamp_list_cursor(ed)
 	ed.focused = true
 	ed.has_preferred_x = false
 	ed.reveal_cursor = true

@@ -86,14 +86,14 @@ list_code_fences_and_setext_spacing_keep_their_context :: proc(t: ^testing.T) {
 	layout := prepare_live_markdown_layout(root, {width = 300, measure = render_test_measure}, text, 2)
 	code_found, active_found := false, false
 	for block in layout.blocks {
-		if block.code {
+		if block.code && !block.active {
 			code_found = true
 			testing.expect_value(t, block.marker, "•")
 			testing.expect_value(t, block.lines[0].spans[0].text, "first()")
 		}
 		if block.active {
 			active_found = true
-			testing.expect_value(t, block.lines[0].spans[0].text, "  second()")
+			testing.expect_value(t, block.lines[0].spans[0].text, "second()")
 		}
 	}
 	testing.expect(t, code_found && active_found)
@@ -180,5 +180,28 @@ caret_scales_with_active_heading_and_selection :: proc(t: ^testing.T) {
 		for span in line.spans do expected += span_width(span, block.font_size, options)
 		testing.expect_value(t, x, expected)
 		commonmark.node_free(root)
+	}
+}
+
+@(test)
+lists_keep_markers_and_inline_styles_while_editing :: proc(t: ^testing.T) {
+	text := "- First **bold** item\n  continuation\n- Second\n- "
+	root := commonmark.parse_document_from_string(text, {})
+	defer commonmark.node_free(root)
+	for active in 0..<4 {
+		layout := prepare_live_markdown_layout(root, {width = 160, cursor = len(text), show_caret = true}, text, active)
+		found := false
+		for block in layout.blocks {
+			if block.active {
+				found = true
+				if active != 1 do testing.expect_value(t, block.marker, "•")
+				for line in block.lines {
+					for span in line.spans {
+						testing.expect(t, span.text != "- " && span.text != "**")
+					}
+				}
+			}
+		}
+		testing.expect(t, found)
 	}
 }
