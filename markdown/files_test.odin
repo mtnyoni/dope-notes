@@ -31,8 +31,8 @@ loads_notebook_folders_and_note_frontmatter :: proc(t: ^testing.T) {
 	testing.expect_value(t, notebooks[0].name, "business planning")
 	testing.expect_value(t, notebooks[1].name, "empty notebook")
 	testing.expect_value(t, len(notebooks[1].notes), 0)
-	testing.expect_value(t, len(notebooks[0].notes), 3)
-	if len(notebooks[0].notes) != 3 do return
+	testing.expect_value(t, len(notebooks[0].notes), 4)
+	if len(notebooks[0].notes) != 4 do return
 	a := notebooks[0].notes[0]
 	testing.expect_value(t, a.slug, "plan")
 	testing.expect_value(t, a.title, "Business Plan")

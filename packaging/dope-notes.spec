@@ -18,6 +18,7 @@ BuildRequires:  gcc
 BuildRequires:  freetype-devel
 BuildRequires:  pkgconfig(sdl3)
 BuildRequires:  pkgconfig(sdl3-image)
+Requires:       curl
 
 
 %description

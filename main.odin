@@ -361,6 +361,7 @@ main :: proc() {
 			}
 		}
 
+		editor_state.media = &image_media
 		clay.UpdateScrollContainers(
 			false,
 			{scroll_delta.x * 7.2, scroll_delta.y * 7.2},

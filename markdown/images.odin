@@ -44,7 +44,7 @@ append_image_nodes :: proc(node: ^commonmark.Node, options: RenderOptions, rows:
 }
 
 image_alt :: proc(node: ^commonmark.Node, bytes: ^[dynamic]u8) {
-	if commonmark.node_get_type(node) == .Text do append(bytes, transmute([]u8)string(commonmark.node_get_literal(node))...)
+	if commonmark.node_get_type(node) == .Text do append(bytes, ..transmute([]u8)string(commonmark.node_get_literal(node)))
 	for child := commonmark.node_first_child(node); child != nil; child = commonmark.node_next(child) do image_alt(child, bytes)
 }
 

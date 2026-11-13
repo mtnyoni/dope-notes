@@ -8,7 +8,6 @@ import "core:strings"
 import markdown "../markdown"
 import sdl "vendor:sdl3"
 import img "vendor:sdl3/image"
-import curl "vendor:curl"
 
 Manager :: struct {
 	renderer: ^sdl.Renderer,
@@ -26,13 +25,12 @@ Download :: struct {
 	thread: ^sdl.Thread,
 	done, ok: bool,
 }
-DownloadBuffer :: struct { bytes: [dynamic]u8 }
 MAX_IMAGE_BYTES :: 32*1024*1024
 
 init :: proc(manager: ^Manager, renderer: ^sdl.Renderer) -> bool {
 	manager.renderer = renderer
 	manager.entries = make(map[string]^Entry)
-	return curl.global_init(curl.GLOBAL_DEFAULT) == .OK
+	return true
 }
 
 destroy :: proc(manager: ^Manager) {
@@ -49,7 +47,6 @@ destroy :: proc(manager: ^Manager) {
 		free(entry)
 	}
 	delete(manager.entries)
-	curl.global_cleanup()
 }
 
 // SDL textures are created on the UI thread; network I/O runs in a worker.
@@ -63,7 +60,7 @@ load_image :: proc(source, note_path: string, user_data: rawptr) -> markdown.Ima
 		hash: u64 = 14695981039346656037
 		for byte in transmute([]u8)source { hash = (hash ~ u64(byte))*1099511628211 }
 		path = fmt.tprintf("%s/attachments/remote-%016x.img", os.dir(note_path), hash)
-	} else if !os.is_abs(path) {
+	} else if !os.is_absolute_path(path) {
 		if note_path == "" do return {}
 		path = fmt.tprintf("%s/%s", os.dir(note_path), source)
 	}
@@ -136,41 +133,21 @@ save_surface :: proc(note_path: string, surface: ^sdl.Surface) -> (relative: str
 	return
 }
 
-receive_image :: proc "c" (data: rawptr, size, count: uint, user_data: rawptr) -> uint {
-	context = runtime.default_context()
-	buffer := cast(^DownloadBuffer)user_data
-	if count > MAX_IMAGE_BYTES || size > MAX_IMAGE_BYTES || size*count > MAX_IMAGE_BYTES-uint(len(buffer.bytes)) do return 0
-	length := size*count
-	append(&buffer.bytes, (cast([^]u8)data)[:length]...)
-	return length
-}
-
 download_image :: proc "c" (data: rawptr) -> c.int {
 	context = runtime.default_context()
 	job := cast(^Download)data
-	buffer := DownloadBuffer{bytes = make([dynamic]u8)}
-	defer delete(buffer.bytes)
-	ok := false
-	handle := curl.easy_init()
-	if handle != nil {
-		_ = curl.easy_setopt(handle, .URL, strings.clone_to_cstring(job.url, context.temp_allocator))
-		_ = curl.easy_setopt(handle, .PROTOCOLS_STR, cstring("http,https"))
-		_ = curl.easy_setopt(handle, .REDIR_PROTOCOLS_STR, cstring("http,https"))
-		_ = curl.easy_setopt(handle, .FOLLOWLOCATION, c.long(1))
-		_ = curl.easy_setopt(handle, .MAXREDIRS, c.long(5))
-		_ = curl.easy_setopt(handle, .FAILONERROR, c.long(1))
-		_ = curl.easy_setopt(handle, .NOSIGNAL, c.long(1))
-		_ = curl.easy_setopt(handle, .TIMEOUT_MS, c.long(8000))
-		_ = curl.easy_setopt(handle, .WRITEFUNCTION, receive_image)
-		_ = curl.easy_setopt(handle, .WRITEDATA, &buffer)
-		if curl.easy_perform(handle) == .OK && len(buffer.bytes) > 0 {
-			partial := fmt.tprintf("%s.part", job.path)
-			if os.write_entire_file(partial, buffer.bytes[:]) == nil {
-				ok = os.rename(partial, job.path) == nil
-				if !ok do _ = os.remove(partial)
-			}
-		}
-		curl.easy_cleanup(handle)
+	partial := fmt.tprintf("%s.part", job.path)
+	state, _, errors, err := os.process_exec({command = {
+		"curl", "--disable", "--silent", "--show-error", "--fail", "--location",
+		"--proto", "=http,https", "--proto-redir", "=http,https",
+		"--max-redirs", "5", "--max-time", "8", "--max-filesize", "33554432",
+		"--output", partial, "--", job.url,
+	}}, context.temp_allocator)
+	ok := err == nil && state.exit_code == 0
+	if ok do ok = os.rename(partial, job.path) == nil
+	if !ok {
+		_ = os.remove(partial)
+		fmt.eprintln("Could not download image:", job.url, err, string(errors))
 	}
 	free_all(context.temp_allocator)
 	sdl.LockMutex(job.mutex)
