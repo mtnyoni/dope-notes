@@ -95,14 +95,21 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 			) {
 				if clicked && clay.Hovered() do app_state.new_note_requested = true
 				if square_pen_icon != nil {
-					if clay.UI()(
-					{
+					// Align the icon with the visible letters within the font's line box.
+					if clay.UI()({
 						layout = {
-							sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(12)},
+							sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(16)},
+							padding = clay.Padding{left = 0, right = 0, top = 2, bottom = 0},
+							childAlignment = clay.ChildAlignment{y = .Center},
 						},
-						image = {imageData = rawptr(square_pen_icon)},
-					},
-					) {}
+					}) {
+						if clay.UI()({
+							layout = {
+								sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(12)},
+							},
+							image = {imageData = rawptr(square_pen_icon)},
+						}) {}
+					}
 				}
 				clay.Text(
 					"New Note",
@@ -129,14 +136,21 @@ Sidebar :: proc(ui_assets: ^assets.Manager, app_state: ^state.AppState) {
 			},
 			) {
 				if search_icon != nil {
-					if clay.UI()(
-					{
+					// Align the icon with the visible letters within the font's line box.
+					if clay.UI()({
 						layout = {
-							sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(12)},
+							sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(16)},
+							padding = clay.Padding{left = 0, right = 0, top = 2, bottom = 0},
+							childAlignment = clay.ChildAlignment{y = .Center},
 						},
-						image = {imageData = rawptr(search_icon)},
-					},
-					) {}
+					}) {
+						if clay.UI()({
+							layout = {
+								sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(12)},
+							},
+							image = {imageData = rawptr(search_icon)},
+						}) {}
+					}
 				}
 				clay.Text(
 					"Search",

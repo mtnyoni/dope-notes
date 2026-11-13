@@ -12,7 +12,7 @@ DocumentView :: proc(ed: ^EditorState, input: ScrollInput = {}, delta_seconds: f
 
 	if ed.reveal_cursor && prepared.caret_top >= 0 && bounds.found {
 		caret_top := EDITOR_PADDING + prepared.caret_top
-		caret_bottom := caret_top + EDITOR_LINE_HEIGHT
+		caret_bottom := caret_top + prepared.caret_height
 		if caret_top < ed.scroll.target + EDITOR_PADDING {
 			ed.scroll.target = max(0, caret_top - EDITOR_PADDING)
 		}

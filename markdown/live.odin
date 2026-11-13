@@ -41,13 +41,22 @@ prepare_live_markdown_layout :: proc(
 		for block_index < len(base.blocks) && base.blocks[block_index].source_end_line < line_number do block_index += 1
 		original: ^RenderBlock
 		if block_index < len(base.blocks) && base.blocks[block_index].source_line <= line_number do original = &base.blocks[block_index]
-		if index == active_line {
-			block := raw_source_block(source, row, line_number, options)
+		if index == active_line || (original == nil && row.start == row.end) {
+			size: u16 = 15
+			height: f32 = 24
+			style: u16
+			if original != nil && commonmark.node_get_type(original.node) == .Heading {
+				size = original.font_size
+				height = original.line_height
+				style = 1
+			}
+			block := raw_source_block(source, row, line_number, options, size, height, style)
+			block.active = index == active_line
 			if original != nil {
 				block.node = original.node
 				seen[block_index] = true
 			}
-			if original != nil && line_number == original.source_end_line do block.spacing = original.spacing
+			if original != nil && line_number == original.source_end_line && commonmark.node_get_type(original.node) != .Paragraph do block.spacing = original.spacing
 			block.height += block.spacing
 			append(&live.blocks, block)
 			live.height += block.height
@@ -57,7 +66,7 @@ prepare_live_markdown_layout :: proc(
 		block := original^
 		block.source_line = line_number
 		block.source_end_line = line_number
-		block.spacing = line_number == original.source_end_line ? original.spacing : 0
+		block.spacing = line_number == original.source_end_line && commonmark.node_get_type(original.node) != .Paragraph ? original.spacing : 0
 		if seen[block_index] {
 			block.marker = ""
 			if len(original.marker) > 0 do block.indent += 24
@@ -136,6 +145,7 @@ prepare_live_markdown_layout :: proc(
 	// Syntax-only lines (setext underlines and closing fences) can be hidden.
 	// Keep each original block's bottom spacing on its last visible line.
 	for original in base.blocks {
+		if commonmark.node_get_type(original.node) == .Paragraph do continue
 		for i := len(live.blocks) - 1; i >= 0; i -= 1 {
 			if live.blocks[i].node == original.node {
 				delta := original.spacing - live.blocks[i].spacing
@@ -189,10 +199,13 @@ raw_source_block :: proc(
 	row: SourceLine,
 	line_number: int,
 	options: RenderOptions,
+	size: u16 = 15,
+	line_height: f32 = 24,
+	style: u16 = 0,
 ) -> RenderBlock {
 	block := RenderBlock {
-		font_size       = 15,
-		line_height     = 24,
+		font_size       = size,
+		line_height     = line_height,
 		active          = true,
 		source_line     = line_number,
 		source_end_line = line_number,
@@ -206,9 +219,10 @@ raw_source_block :: proc(
 		if source[at] == ' ' || source[at] == '\t' do last_space = at
 		span := TextSpan {
 			text  = source[start:next],
+			style = style,
 			color = theme.Light.text,
 		}
-		if at > start && span_width(span, 15, options) > options.width {
+		if at > start && span_width(span, size, options) > options.width {
 			break_at := at
 			if last_space > start do break_at = last_space + 1
 			append_raw_line(&block, source, start, break_at, row.start, line_number)
@@ -218,6 +232,9 @@ raw_source_block :: proc(
 		at = next
 	}
 	append_raw_line(&block, source, start, row.end, row.start, line_number)
+	for &line in block.lines {
+		for &span in line.spans do span.style = style
+	}
 	block.height = f32(len(block.lines)) * block.line_height
 	return block
 }

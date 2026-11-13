@@ -49,6 +49,7 @@ EditorTextLayout :: struct {
 	height:      f32,
 	rendered:    markdown.DocumentLayout,
 	caret_top:   f32,
+	caret_height: f32,
 }
 
 Editor :: proc(ed: ^EditorState, prepared: ^EditorTextLayout) {
@@ -340,7 +341,9 @@ editor_prepare_layout :: proc(ed: ^EditorState) -> EditorTextLayout {
 				last := index == len(block.lines) - 1
 				if ed.cursor >= row.source_start &&
 				   (ed.cursor < row.source_end || (last && ed.cursor == row.source_end)) {
+					_, caret_y, caret_height := markdown.caret_geometry(block, row, editor_markdown_options(ed))
 					prepared.caret_top = y + block.top_padding + f32(index) * block.line_height
+					prepared.caret_height = caret_y + caret_height
 				}
 			}
 		}

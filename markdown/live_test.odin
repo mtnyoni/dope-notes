@@ -130,3 +130,55 @@ selection_highlights_only_selected_visible_text :: proc(t: ^testing.T) {
 		testing.expect_value(t, selected, "éé wordSecond bold")
 	}
 }
+
+@(test)
+active_heading_uses_heading_style_immediately :: proc(t: ^testing.T) {
+	for text in ([]string{"# ", "## Header", "### Header"}) {
+		root := commonmark.parse_document_from_string(text, {})
+		layout := prepare_live_markdown_layout(root, {width = 300}, text, 0)
+		testing.expect_value(t, len(layout.blocks), 1)
+		block := layout.blocks[0]
+		testing.expect(t, block.active && block.font_size > 15)
+		testing.expect(t, block.lines[0].spans[0].style & 1 != 0)
+		testing.expect_value(t, block.lines[0].source_start, 0)
+		testing.expect_value(t, block.lines[len(block.lines)-1].source_end, len(text))
+		commonmark.node_free(root)
+	}
+}
+
+@(test)
+paragraph_enter_keeps_line_position_when_typing :: proc(t: ^testing.T) {
+	for text in ([]string{"Paragraph\n", "Paragraph\nNext", "Paragraph\n\n", "Paragraph\n\nNext"}) {
+		root := commonmark.parse_document_from_string(text, {})
+		rows := source_lines(text)
+		layout := prepare_live_markdown_layout(root, {width = 300}, text, len(rows)-1)
+		top: f32
+		for block in layout.blocks {
+			if block.active {
+				testing.expect_value(t, top, f32(len(rows)-1) * 24)
+				testing.expect_value(t, block.line_height, f32(24))
+			}
+			top += block.height
+		}
+		commonmark.node_free(root)
+	}
+}
+
+@(test)
+caret_scales_with_active_heading_and_selection :: proc(t: ^testing.T) {
+	texts := []string{"paragraph", "# Heading", "## Heading", "### Heading"}
+	for text in texts {
+		root := commonmark.parse_document_from_string(text, {})
+		options := RenderOptions{width = 500, cursor = len(text), selection_start = 2, selection_end = 5}
+		layout := prepare_live_markdown_layout(root, options, text, 0)
+		block := layout.blocks[0]
+		line := block.lines[0]
+		x, y, height := caret_geometry(block, line, options)
+		testing.expect_value(t, height, f32(block.font_size))
+		testing.expect_value(t, y, (block.line_height-height)/2)
+		expected: f32
+		for span in line.spans do expected += span_width(span, block.font_size, options)
+		testing.expect_value(t, x, expected)
+		commonmark.node_free(root)
+	}
+}

@@ -188,20 +188,18 @@ render_markdown_ast_to_clay :: proc(
 							if options.cursor >= line.source_start &&
 							   (options.cursor < line.source_end ||
 									   (last && options.cursor == line.source_end)) {
-								span := line.spans[0]
-								span.text = span.text[:options.cursor - line.source_start]
-								x := span_width(span, block.font_size, options)
+								x, caret_y, caret_height := caret_geometry(block, line, options)
 								if clay.UI(clay.ID("Caret"))(
 								{
 									layout = {
 										sizing = {
 											width = clay.SizingFixed(2),
-											height = clay.SizingFixed(20),
+											height = clay.SizingFixed(caret_height),
 										},
 									},
 									floating = {
 										attachTo = .Parent,
-										offset = {x, 2},
+										offset = {x, caret_y},
 										zIndex = 1,
 										pointerCaptureMode = .Passthrough,
 										clipTo = .AttachedParent,
@@ -450,4 +448,20 @@ wrap_inline :: proc(
 		}
 	}
 	return lines
+}
+
+// Measure each styled span so selections do not change the caret position.
+caret_geometry :: proc(block: RenderBlock, line: RenderLine, options: RenderOptions) -> (x, y, height: f32) {
+	remaining := max(0, options.cursor - line.source_start)
+	for span in line.spans {
+		prefix := span
+		count := min(remaining, len(span.text))
+		prefix.text = span.text[:count]
+		x += span_width(prefix, block.font_size, options)
+		remaining -= count
+		if remaining == 0 do break
+	}
+	height = f32(block.font_size)
+	y = max(0, (block.line_height - height) / 2)
+	return
 }
