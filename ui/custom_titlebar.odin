@@ -1,6 +1,9 @@
 package ui
 
 import assets "../assets"
+import config "../appconfig"
+import "core:fmt"
+import "core:strings"
 import theme "../theme"
 import clay "shared:clay"
 import sdl "vendor:sdl3"
@@ -8,6 +11,8 @@ import sdl "vendor:sdl3"
 TITLEBAR_HEIGHT :: 32
 TITLEBAR_BUTTON_WIDTH :: 28
 TITLEBAR_BUTTON_GAP :: 1
+TITLEBAR_ABOUT_WIDTH :: 52
+TITLEBAR_CONTROLS_WIDTH :: TITLEBAR_ABOUT_WIDTH + 3 * TITLEBAR_BUTTON_WIDTH + 3 * TITLEBAR_BUTTON_GAP
 TITLEBAR_RESIZE_EDGE :: 6
 TITLEBAR_RESIZE_CORNER :: 12
 
@@ -22,8 +27,9 @@ window_hit_test :: proc "c" (
 titlebar_hit_test :: proc "c" (window: ^sdl.Window, pos: ^sdl.Point) -> sdl.HitTestResult {
 	width, height: i32
 	if !sdl.GetWindowSize(window, &width, &height) do return .NORMAL
+	controls_left := width - TITLEBAR_CONTROLS_WIDTH - 8 - (.MAXIMIZED in sdl.GetWindowFlags(window) ? 0 : 4)
 	if .MAXIMIZED in sdl.GetWindowFlags(window) {
-		if pos.y < TITLEBAR_HEIGHT && pos.x < width - (3 * TITLEBAR_BUTTON_WIDTH + 2 * TITLEBAR_BUTTON_GAP) do return .DRAGGABLE
+		if pos.y < TITLEBAR_HEIGHT && pos.x < controls_left do return .DRAGGABLE
 		return .NORMAL
 	}
 
@@ -45,7 +51,7 @@ titlebar_hit_test :: proc "c" (window: ^sdl.Window, pos: ^sdl.Point) -> sdl.HitT
 	if bottom do return .RESIZE_BOTTOM
 	if left do return .RESIZE_LEFT
 	if right do return .RESIZE_RIGHT
-	if pos.y < TITLEBAR_HEIGHT && pos.x < width - (3 * TITLEBAR_BUTTON_WIDTH + 2 * TITLEBAR_BUTTON_GAP) do return .DRAGGABLE
+	if pos.y < TITLEBAR_HEIGHT && pos.x < controls_left do return .DRAGGABLE
 
 	return .NORMAL
 }
@@ -97,6 +103,7 @@ TitleBar :: proc(window: ^sdl.Window, ui_assets: ^assets.Manager) {
 			},
 		},
 		) {
+			TitleBarButton(window, ui_assets, "About", 3)
 			TitleBarButton(window, ui_assets, "Minimize", 0)
 			TitleBarButton(window, ui_assets, "Maximize", 1)
 			TitleBarButton(window, ui_assets, "Close", 2)
@@ -114,7 +121,7 @@ TitleBarButton :: proc(
 	{
 		layout = {
 			sizing = {
-				width = clay.SizingFixed(TITLEBAR_BUTTON_WIDTH),
+				width = clay.SizingFixed(action == 3 ? TITLEBAR_ABOUT_WIDTH : TITLEBAR_BUTTON_WIDTH),
 				height = clay.SizingFixed(TITLEBAR_HEIGHT),
 			},
 			childAlignment = {x = .Center, y = .Center},
@@ -136,6 +143,9 @@ TitleBarButton :: proc(
 					type = .QUIT,
 				}
 				_ = sdl.PushEvent(&event)
+			case 3:
+				message := fmt.tprintf("Dope Notes\nVersion %s", config.DISPLAY_VERSION)
+				_ = sdl.ShowSimpleMessageBox({.INFORMATION}, "About Dope Notes", strings.clone_to_cstring(message, context.temp_allocator), window)
 			}
 		}
 		icon: assets.Icon = .Square
@@ -154,14 +164,16 @@ TitleBarButton :: proc(
 		if clay.UI(clay.ID("TitleBarButtonFace", u32(action)))(
 		{
 			layout = {
-				sizing = {width = clay.SizingFixed(28), height = clay.SizingFixed(28)},
+				sizing = {width = clay.SizingFixed(action == 3 ? TITLEBAR_ABOUT_WIDTH : 28), height = clay.SizingFixed(28)},
 				childAlignment = {x = .Center, y = .Center},
 			},
 			backgroundColor = hovered ? theme.Gray_200 : clay.Color{},
-			cornerRadius = clay.CornerRadiusAll(14),
+			cornerRadius = clay.CornerRadiusAll(action == 3 ? 6 : 14),
 		},
 		) {
-			if action == 0 {
+			if action == 3 {
+				clay.Text("About", {fontSize = 12, textColor = theme.Light.text, wrapMode = .None})
+			} else if action == 0 {
 				clay.Text("−", {fontSize = 16, textColor = theme.Light.text, wrapMode = .None})
 			} else if texture := assets.get(ui_assets, icon); texture != nil {
 				if clay.UI()(

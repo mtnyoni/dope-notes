@@ -63,7 +63,7 @@ main :: proc() {
 	context.allocator = mem.tracking_allocator(&track)
 	defer mem.tracking_allocator_destroy(&track)
 
-	_ = sdl.SetAppMetadata(config.WINDOW_TITLE, "0.0.0", config.APPLICATION_ID)
+	_ = sdl.SetAppMetadata(config.WINDOW_TITLE, config.VERSION, config.APPLICATION_ID)
 	if !sdl.Init(sdl.INIT_VIDEO) {
 		fmt.eprintln("SDL init failed:", sdl.GetError())
 		return

@@ -34,6 +34,7 @@ mkdir -p odin_shared
 ln -sfnT ../shared/clay/bindings/odin/clay-odin odin_shared/clay
 %{odin_bin} build . \
     -define:DOPE_NOTES_DEV=false \
+    '-define:DOPE_NOTES_VERSION=%{version}' \
     -collection:shared=./odin_shared \
     -out:dope-notes \
     -no-rpath \

@@ -10,6 +10,8 @@ On Linux, notebooks are stored under `$XDG_DATA_HOME`, defaulting to `~/.local/s
 
 `just run`, `just build`, direct Odin builds, and `bash build.sh --debug` use development storage and display **Dope Notes (Development)** in the window title. RPMs and `bash build.sh --release` use production storage. To build production manually, pass `-define:DOPE_NOTES_DEV=false` to Odin.
 
+The title bar's About button shows the app version, with `(dev)` on development builds. RPM builds embed their package version. Manual builds can set it with `-define:DOPE_NOTES_VERSION=1.2.3`; the default is `0.0.0`.
+
 Each notebook contains a folder per note, with the Markdown file and an `attachments/` subdirectory. Existing loose `.md` and `.markdown` files are moved into this layout at startup without rewriting their contents. New Note opens a blank note, and the sidebar follows its title and first body line as you type.
 
 Images use standard Markdown, such as `![Alt text](attachments/image-1.png)`. Paste an image from the clipboard or drop an image file into the editor to save a PNG in the current note's `attachments/` folder and insert its relative link. Copied image files can also be pasted through file-manager clipboard data. Remote HTTP/HTTPS image links load in the background and are cached in the same attachments directory; `curl` must be available on `PATH` for remote images. Missing images show their alt text. Images scale down to fit the editor while keeping their aspect ratio.
