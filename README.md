@@ -2,6 +2,8 @@
 
 A desktop notes editor built with Odin, SDL3, Clay, and FreeType. It includes a gap-buffer editor, note selection, Unicode text input, line wrapping, and mouse-wheel scrolling.
 
+Display equations use `$$` delimiters, either on their own lines or around a single-line equation. The built-in renderer supports fractions (`\frac{1}{2}`), superscripts (`v^2`), subscripts (`x_{1}`), grouped expressions, common Greek letters such as `\rho`, and literal text (`\text{constant}`). The preview updates while the active source line remains editable. This is a subset of LaTeX notation; unsupported commands remain visible as text. Math inside fenced code blocks is left unchanged.
+
 The focused note is saved to its Markdown file about once per second when its content changes, and also when switching notes or closing the app. Per-note cursor and scroll positions remain in memory.
 
 On Linux, notebooks are stored under `$XDG_DATA_HOME`, defaulting to `~/.local/share`. On Windows, they are stored under `%APPDATA%`. Production RPMs use `dope-notes/notebooks`; development builds use `dope-notes-dev/notebooks`. Existing notes stay in the production directory. A fresh development directory starts with its own Default notebook and welcome note.

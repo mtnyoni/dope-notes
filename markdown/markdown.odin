@@ -36,6 +36,8 @@ RenderLine :: struct {
 	source_start, source_end: int,
 }
 RenderBlock :: struct {
+	math: bool,
+	formula: MathBox,
 	table, table_header: bool,
 	table_cells: [dynamic]TableCell,
 	lines:                        [dynamic]RenderLine,
@@ -99,6 +101,10 @@ render_markdown_ast_to_clay :: proc(
 			cornerRadius = clay.CornerRadiusAll(4),
 		},
 		) {
+			if block.math {
+				render_math(block.formula)
+				continue
+			}
 			if block.table {
 				render_table_row(block)
 				continue

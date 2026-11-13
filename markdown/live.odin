@@ -32,6 +32,7 @@ prepare_live_markdown_layout :: proc(
 	base := prepare_markdown_layout(root, options)
 	source_rows := source_lines(source)
 	tables := prepare_table_rows(source, source_rows[:], base, options)
+	formulae := prepare_math_rows(source, source_rows[:], base, options)
 	live := DocumentLayout {
 		blocks = make([dynamic]RenderBlock, context.temp_allocator),
 	}
@@ -42,6 +43,18 @@ prepare_live_markdown_layout :: proc(
 		for block_index < len(base.blocks) && base.blocks[block_index].source_end_line < line_number do block_index += 1
 		original: ^RenderBlock
 		if block_index < len(base.blocks) && base.blocks[block_index].source_line <= line_number do original = &base.blocks[block_index]
+		if formula, found := formulae[index]; found {
+			if formula.height > 0 {
+				append(&live.blocks, formula)
+				live.height += formula.height
+			}
+			if index == active_line {
+				block := raw_source_block(source, row, line_number, options)
+				append(&live.blocks, block)
+				live.height += block.height
+			}
+			continue
+		}
 		if table, found := tables[index]; found && index != active_line {
 			if table.height > 0 {
 				append(&live.blocks, table)
