@@ -127,6 +127,14 @@ int app_font_rasterize_styled(AppFont *font, const char *text, int length,
     }
     previous = glyph;
   }
+  if (style & 4) {
+    int underline_y = baseline + 1;
+    if (underline_y >= *height) underline_y = *height - 1;
+    for (int x = 0; x < *width; ++x) {
+      unsigned char *dest = rgba + ((size_t)underline_y * *width + x) * 4;
+      dest[0] = dest[1] = dest[2] = dest[3] = 255;
+    }
+  }
   *pixels = rgba;
   return 1;
 }

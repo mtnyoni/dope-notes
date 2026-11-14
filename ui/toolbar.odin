@@ -7,7 +7,7 @@ import clay "shared:clay"
 TOOLBAR_HEIGHT :: 40
 TOOLBAR_BUTTON_SIZE :: 20
 
-EditorToolBar :: proc(ui_assets: ^assets.Manager) {
+EditorToolBar :: proc(ui_assets: ^assets.Manager, ed: ^EditorState = nil) {
 	if clay.UI(clay.ID("EditorToolbar"))(
 	{
 		layout = {
@@ -79,9 +79,9 @@ EditorToolBar :: proc(ui_assets: ^assets.Manager) {
 				ToolbarImage(ui_assets, .ChevronDown)
 			}
 			ToolbarSeparator()
-			ToolbarIconButton(ui_assets, .LetterB)
-			ToolbarIconButton(ui_assets, .Slash)
-			ToolbarIconButton(ui_assets, .Underline)
+			ToolbarIconButton(ui_assets, .LetterB, ed = ed)
+			ToolbarIconButton(ui_assets, .Slash, ed = ed)
+			ToolbarIconButton(ui_assets, .Underline, ed = ed)
 			ToolbarSeparator()
 			ToolbarIconButton(ui_assets, .TextAlignStart, dropdown = true)
 			ToolbarIconButton(ui_assets, .List)
@@ -111,7 +111,15 @@ ToolbarIconButton :: proc(
 	icon: assets.Icon,
 	dropdown := false,
 	filled := false,
+	ed: ^EditorState = nil,
 ) {
+	style: u16
+	#partial switch icon {
+	case .LetterB: style = FORMAT_BOLD
+	case .Slash: style = FORMAT_ITALIC
+	case .Underline: style = FORMAT_UNDERLINE
+	}
+	active := style != 0 && editor_format_active(ed, style)
 	width: f32 = TOOLBAR_BUTTON_SIZE
 	if dropdown do width = 48
 	if clay.UI(clay.ID("ToolbarButton", u32(icon)))(
@@ -125,10 +133,13 @@ ToolbarIconButton :: proc(
 			childAlignment = {x = .Center, y = .Center},
 			childGap = 4,
 		},
-		backgroundColor = clay.Hovered() ? theme.Gray_100 : (filled ? theme.Gray_50 : clay.Color{}),
+		backgroundColor = active ? theme.Cyan_100 : (clay.Hovered() ? theme.Gray_100 : (filled ? theme.Gray_50 : clay.Color{})),
 		cornerRadius = clay.CornerRadiusAll(6),
 	},
 	) {
+		if ed != nil && style != 0 && clay.Hovered() && clay.GetPointerState().state == .PressedThisFrame {
+			editor_toggle_format(ed, style)
+		}
 		ToolbarImage(ui_assets, icon)
 		if dropdown do ToolbarImage(ui_assets, .ChevronDown)
 	}

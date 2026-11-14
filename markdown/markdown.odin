@@ -13,6 +13,7 @@ MeasureText :: #type proc "c" (
 ) -> clay.Dimensions
 
 RenderOptions :: struct {
+	format_preview: bool,
 	load_image: LoadImage,
 	note_path: string,
 	image_user_data: rawptr,
@@ -26,7 +27,7 @@ RenderOptions :: struct {
 
 TextSpan :: struct {
 	text:          string,
-	style:         u16, // FreeType style bits: 1 = bold, 2 = italic.
+	style:         u16, // FreeType style bits: 1 = bold, 2 = italic, 4 = underline.
 	color:         clay.Color,
 	code:          bool,
 	selected:      bool,
@@ -391,9 +392,15 @@ collect_inline :: proc(
 	case .Image:
 		return
 	}
+	style_before := style
 	for child := commonmark.node_first_child(node);
 	    child != nil;
 	    child = commonmark.node_next(child) {
+		if commonmark.node_get_type(child) == .HTML_Inline {
+			tag := strings.trim_space(string(commonmark.node_get_literal(child)))
+			if strings.equal_fold(tag, "<u>") { style |= 4; continue }
+			if strings.equal_fold(tag, "</u>") { style = (style &~ 4) | (style_before & 4); continue }
+		}
 		collect_inline(child, spans, style, color)
 	}
 }

@@ -68,7 +68,8 @@ prepare_live_markdown_layout :: proc(
 			}
 		}
 		in_list := original != nil && node_in_list(original.node)
-		if (index == active_line && !in_list && !has_image) || (original == nil && row.start == row.end) {
+		show_source := !options.format_preview && !strings.contains(source[row.start:row.end], "<u>")
+		if (index == active_line && !in_list && !has_image && (show_source || original == nil || commonmark.node_get_type(original.node) == .Heading)) || (original == nil && row.start == row.end) {
 			size: u16 = 15
 			height: f32 = 24
 			style: u16

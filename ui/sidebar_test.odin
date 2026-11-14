@@ -86,5 +86,6 @@ sidebar_description_preserves_padding :: proc(t: ^testing.T) {
 	editor_mouse_selection_test(t)
 	editor_table_mouse_test(t)
 	editor_formula_mouse_test(t)
+	editor_toolbar_formatting_test(t)
 
 }

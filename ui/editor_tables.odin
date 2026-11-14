@@ -83,15 +83,12 @@ editor_handle_table_event :: proc(ed: ^EditorState, event: ^sdl.Event) -> bool {
 }
 
 editor_insert_cell_text :: proc(ed: ^EditorState, value: string) {
-	editor_delete_selection(ed)
 	text, _ := strings.replace_all(value, "\r\n", " ", context.temp_allocator)
 	text, _ = strings.replace_all(text, "\n", " ", context.temp_allocator)
 	text, _ = strings.replace_all(text, "\r", " ", context.temp_allocator)
 	text, _ = strings.replace_all(text, "\\", "\\\\", context.temp_allocator)
 	text, _ = strings.replace_all(text, "|", "\\|", context.temp_allocator)
-	buffer.insert(&ed.buf, ed.cursor, text)
-	ed.cursor += len(text)
-	ed.markdown_dirty = true
+	editor_insert_formatted_text(ed, text)
 }
 
 editor_table_cell_at :: proc(layout: markdown.DocumentLayout, position: int) -> (markdown.TableCell, bool) {

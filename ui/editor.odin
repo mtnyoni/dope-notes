@@ -40,6 +40,11 @@ EditorState :: struct {
 	reveal_cursor:      bool,
 	selection:          EditorSelection,
 	selection_dragging: bool,
+	typing_style: u16,
+	format_run_style: u16,
+	format_run_end: int,
+	format_run_start: int,
+	format_preview: bool,
 }
 
 EditorLine :: struct {
@@ -111,10 +116,7 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 	#partial switch e.type {
 	case .TEXT_INPUT:
 		s := string(e.text.text)
-		editor_delete_selection(ed)
-		buffer.insert(buf, ed.cursor, s)
-		ed.cursor += len(s)
-		ed.markdown_dirty = true
+		editor_insert_formatted_text(ed, s)
 
 	case .KEY_DOWN:
 		if .RCTRL in e.key.mod || .LCTRL in e.key.mod {
@@ -131,10 +133,7 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 						defer sdl.free(text)
 
 						s := string(cstring(text))
-						editor_delete_selection(ed)
-						buffer.insert(&ed.buf, ed.cursor, s)
-						ed.cursor += len(s)
-						ed.markdown_dirty = true
+						editor_insert_formatted_text(ed, s)
 					}
 				}
 				break
@@ -152,10 +151,18 @@ editor_handle_event :: proc(ed: ^EditorState, e: ^sdl.Event) {
 		switch e.key.key {
 		case sdl.K_RETURN, sdl.K_KP_ENTER:
 			editor_delete_selection(ed)
+			if ed.format_run_style != 0 && ed.cursor == ed.format_run_end {
+				_, closing := editor_format_markers(ed.format_run_style)
+				ed.cursor += len(closing)
+				ed.format_run_style = 0
+			}
 			editor_insert_newline(ed)
 			ed.markdown_dirty = true
 
 		case sdl.K_BACKSPACE:
+			if editor_backspace_format_run(ed) {
+				break
+			}
 			if selection, ok := get_editor_selection(ed); ok {
 				start := min(ed.selection.start, ed.selection.end)
 				end := max(ed.selection.start, ed.selection.end)
@@ -513,6 +520,7 @@ editor_cursor_line :: proc(lines: []EditorLine, cursor: int) -> int {
 
 editor_markdown_options :: proc(ed: ^EditorState) -> markdown.RenderOptions {
 	return {
+		format_preview = ed.format_preview,
 		load_image = media.load_image,
 		note_path = ed.note_path,
 		image_user_data = ed.media,

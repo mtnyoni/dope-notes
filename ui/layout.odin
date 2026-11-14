@@ -63,7 +63,7 @@ UILayout :: proc(
 					},
 				},
 				) {
-					EditorToolBar(ui_assets)
+					EditorToolBar(ui_assets, ed)
 
 					if clay.UI()(
 					{
