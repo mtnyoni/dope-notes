@@ -242,6 +242,7 @@ main :: proc() {
 	running := true
 	settings_open := false
 	menu_sync_pending := false
+	next_auto_sync := sdl.GetTicksNS()
 	for running {
 		defer free_all(context.temp_allocator)
 		sync_requested := menu_sync_pending
@@ -252,6 +253,10 @@ main :: proc() {
 		sdl.UnlockMutex(ticker.mutex)
 		if save_due do save_focused_note(editor_state, loaded_doc, &last_saved)
 		now := sdl.GetTicksNS()
+		if config.github_repo() != "" && now >= next_auto_sync {
+			sync_requested = true
+			next_auto_sync = now + 60 * 1_000_000_000
+		}
 		delta_seconds := clamp(f32(now - previous_frame) / 1e9, 0.001, 0.1)
 		previous_frame = now
 		e: sdl.Event

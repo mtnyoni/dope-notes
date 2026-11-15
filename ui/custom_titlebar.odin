@@ -1,10 +1,10 @@
 package ui
 
-import assets "../assets"
 import config "../appconfig"
+import assets "../assets"
+import theme "../theme"
 import "core:fmt"
 import "core:strings"
-import theme "../theme"
 import clay "shared:clay"
 import sdl "vendor:sdl3"
 
@@ -12,7 +12,8 @@ TITLEBAR_HEIGHT :: 32
 TITLEBAR_BUTTON_WIDTH :: 28
 TITLEBAR_BUTTON_GAP :: 1
 TITLEBAR_ABOUT_WIDTH :: 28
-TITLEBAR_CONTROLS_WIDTH :: TITLEBAR_ABOUT_WIDTH + 3 * TITLEBAR_BUTTON_WIDTH + 3 * TITLEBAR_BUTTON_GAP
+TITLEBAR_CONTROLS_WIDTH ::
+	TITLEBAR_ABOUT_WIDTH + 3 * TITLEBAR_BUTTON_WIDTH + 3 * TITLEBAR_BUTTON_GAP
 TITLEBAR_RESIZE_EDGE :: 6
 TITLEBAR_RESIZE_CORNER :: 12
 
@@ -27,7 +28,8 @@ window_hit_test :: proc "c" (
 titlebar_hit_test :: proc "c" (window: ^sdl.Window, pos: ^sdl.Point) -> sdl.HitTestResult {
 	width, height: i32
 	if !sdl.GetWindowSize(window, &width, &height) do return .NORMAL
-	controls_left := width - TITLEBAR_CONTROLS_WIDTH - 8 - (.MAXIMIZED in sdl.GetWindowFlags(window) ? 0 : 4)
+	controls_left :=
+		width - TITLEBAR_CONTROLS_WIDTH - 8 - (.MAXIMIZED in sdl.GetWindowFlags(window) ? 0 : 4)
 	if .MAXIMIZED in sdl.GetWindowFlags(window) {
 		if pos.y < TITLEBAR_HEIGHT && pos.x < controls_left do return .DRAGGABLE
 		return .NORMAL
@@ -56,7 +58,12 @@ titlebar_hit_test :: proc "c" (window: ^sdl.Window, pos: ^sdl.Point) -> sdl.HitT
 	return .NORMAL
 }
 
-TitleBar :: proc(window: ^sdl.Window, ui_assets: ^assets.Manager, settings_open: ^bool, menu_sync_pending: ^bool) {
+TitleBar :: proc(
+	window: ^sdl.Window,
+	ui_assets: ^assets.Manager,
+	settings_open: ^bool,
+	menu_sync_pending: ^bool,
+) {
 	if clay.UI(clay.ID("TitleBar"))(
 	{
 		layout = {
@@ -109,7 +116,7 @@ TitleBar :: proc(window: ^sdl.Window, ui_assets: ^assets.Manager, settings_open:
 			TitleBarButton(window, ui_assets, "Close", 2)
 		}
 		if settings_open != nil && settings_open^ {
-			SettingsMenu(window, settings_open, menu_sync_pending)
+			SettingsDropdownMenu(window, {open = settings_open, sync_pending = menu_sync_pending})
 		}
 	}
 }
@@ -121,11 +128,14 @@ TitleBarButton :: proc(
 	action: int,
 	settings_open: ^bool = nil,
 ) {
+
 	if clay.UI(clay.ID(name))(
 	{
 		layout = {
 			sizing = {
-				width = clay.SizingFixed(action == 3 ? TITLEBAR_ABOUT_WIDTH : TITLEBAR_BUTTON_WIDTH),
+				width = clay.SizingFixed(
+					action == 3 ? TITLEBAR_ABOUT_WIDTH : TITLEBAR_BUTTON_WIDTH,
+				),
 				height = clay.SizingFixed(TITLEBAR_HEIGHT),
 			},
 			childAlignment = {x = .Center, y = .Center},
@@ -169,7 +179,10 @@ TitleBarButton :: proc(
 		if clay.UI(clay.ID("TitleBarButtonFace", u32(action)))(
 		{
 			layout = {
-				sizing = {width = clay.SizingFixed(action == 3 ? TITLEBAR_ABOUT_WIDTH : 28), height = clay.SizingFixed(28)},
+				sizing = {
+					width = clay.SizingFixed(action == 3 ? TITLEBAR_ABOUT_WIDTH : 28),
+					height = clay.SizingFixed(28),
+				},
 				childAlignment = {x = .Center, y = .Center},
 			},
 			backgroundColor = hovered ? theme.Gray_200 : clay.Color{},
@@ -190,8 +203,16 @@ TitleBarButton :: proc(
 	}
 }
 
-SettingsMenu :: proc(window: ^sdl.Window, settings_open: ^bool, menu_sync_pending: ^bool) {
-	if clay.UI(clay.ID("SettingsMenu"))({
+SettingsDropdownMenuState :: struct {
+	open:         ^bool,
+	sync_pending: ^bool,
+}
+
+SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMenuState) {
+	menu_items := [2]string{"Sync", "About"}
+
+	if clay.UI(clay.ID("SettingsMenu"))(
+	{
 		layout = {
 			sizing = {width = clay.SizingFixed(112), height = clay.SizingFit()},
 			layoutDirection = .TopToBottom,
@@ -205,28 +226,52 @@ SettingsMenu :: proc(window: ^sdl.Window, settings_open: ^bool, menu_sync_pendin
 		},
 		backgroundColor = theme.White,
 		cornerRadius = clay.CornerRadiusAll(6),
-		border = clay.BorderElementConfig {width = clay.BorderWidth{left = 1, top = 1, right = 1, bottom = 1}, color = theme.Light.border},
-	}) {
-		items := [2]string{"Sync", "About"}
-		for label, index in items {
+		border = clay.BorderElementConfig {
+			width = clay.BorderWidth{left = 1, top = 1, right = 1, bottom = 1},
+			color = theme.Light.border,
+		},
+	},
+	) {
+		for label, index in menu_items {
 			hovered := false
-			if clay.UI(clay.ID("SettingsMenuItem", u32(index)))({
-				layout = {sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(28)}, childAlignment = {y = .Center}, padding = clay.Padding{left = 8}},
-				backgroundColor = theme.White,
+			if clay.UI(clay.ID("SettingsMenuItem", u32(index)))(
+			{
+				layout = {
+					sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(28)},
+					childAlignment = {y = .Center},
+					padding = clay.Padding{left = 8},
+				},
+				backgroundColor = clay.Hovered() ? theme.Gray_100 : theme.White,
 				cornerRadius = clay.CornerRadiusAll(4),
-			}) {
+			},
+			) {
 				hovered = clay.Hovered()
 				clay.Text(label, {fontSize = 12, textColor = theme.Light.text, wrapMode = .None})
 			}
+
 			if hovered && clay.GetPointerState().state == .PressedThisFrame {
-				settings_open^ = false
+				menu_state.open^ = false
+
 				if index == 0 {
-					if menu_sync_pending != nil do menu_sync_pending^ = true
+					if menu_state.sync_pending != nil do menu_state.sync_pending^ = true
 				} else if window != nil {
 					message := fmt.tprintf("Dope Notes\nVersion %s", config.DISPLAY_VERSION)
-					_ = sdl.ShowSimpleMessageBox({.INFORMATION}, "About Dope Notes", strings.clone_to_cstring(message, context.temp_allocator), window)
+					_ = sdl.ShowSimpleMessageBox(
+						{.INFORMATION},
+						"About Dope Notes",
+						strings.clone_to_cstring(message, context.temp_allocator),
+						window,
+					)
 				}
 			}
 		}
+	}
+
+	if menu_state.open != nil &&
+	   menu_state.open^ &&
+	   clay.GetPointerState().state == .PressedThisFrame &&
+	   !clay.PointerOver(clay.ID("SettingsMenu")) &&
+	   !clay.PointerOver(clay.ID("Settings")) {
+		menu_state.open^ = false
 	}
 }
