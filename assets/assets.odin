@@ -24,6 +24,8 @@ Icon :: enum {
 	Square,
 	SquaresUnite,
 	X,
+	Minus,
+	Settings,
 }
 
 // Register new icons here; loading and cleanup are handled for every entry.
@@ -45,6 +47,8 @@ ICON_PATHS :: [Icon]cstring {
 	.Square = "assets/icons/square.png",
 	.SquaresUnite = "assets/icons/squares-unite.png",
 	.X = "assets/icons/x.png",
+	.Minus = "assets/icons/minus.png",
+	.Settings = "assets/icons/settings.png",
 }
 
 Manager :: struct {

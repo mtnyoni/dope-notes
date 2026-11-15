@@ -11,7 +11,7 @@ import sdl "vendor:sdl3"
 TITLEBAR_HEIGHT :: 32
 TITLEBAR_BUTTON_WIDTH :: 28
 TITLEBAR_BUTTON_GAP :: 1
-TITLEBAR_ABOUT_WIDTH :: 52
+TITLEBAR_ABOUT_WIDTH :: 28
 TITLEBAR_CONTROLS_WIDTH :: TITLEBAR_ABOUT_WIDTH + 3 * TITLEBAR_BUTTON_WIDTH + 3 * TITLEBAR_BUTTON_GAP
 TITLEBAR_RESIZE_EDGE :: 6
 TITLEBAR_RESIZE_CORNER :: 12
@@ -152,12 +152,14 @@ TitleBarButton :: proc(
 
 		switch action {
 		case 0:
-			icon = .Square
+			icon = .Minus
 		case 1:
 			icon =
 				window != nil && .MAXIMIZED in sdl.GetWindowFlags(window) ? .SquaresUnite : .Square
 		case 2:
 			icon = .X
+		case 3:
+			icon = .Settings
 		}
 
 		hovered := clay.Hovered()
@@ -171,11 +173,7 @@ TitleBarButton :: proc(
 			cornerRadius = clay.CornerRadiusAll(action == 3 ? 6 : 14),
 		},
 		) {
-			if action == 3 {
-				clay.Text("About", {fontSize = 12, textColor = theme.Light.text, wrapMode = .None})
-			} else if action == 0 {
-				clay.Text("−", {fontSize = 16, textColor = theme.Light.text, wrapMode = .None})
-			} else if texture := assets.get(ui_assets, icon); texture != nil {
+			if texture := assets.get(ui_assets, icon); texture != nil {
 				if clay.UI()(
 				{
 					layout = {

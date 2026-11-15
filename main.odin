@@ -1,8 +1,8 @@
 package main
 
 import config "./appconfig"
-import state "./state"
 import media "./media"
+import state "./state"
 import assets "assets"
 import buffer "buffer"
 import "core:c"
@@ -45,6 +45,7 @@ save_tick :: proc "c" (data: rawptr) -> c.int {
 
 save_focused_note :: proc(ed: ^ui.EditorState, path: string, last_saved: ^string) {
 	if path == "" || ed == nil do return
+
 	left, right := buffer.get_strings(&ed.buf)
 	content := fmt.tprintf("%s%s", left, right)
 	if content == last_saved^ do return
@@ -52,6 +53,7 @@ save_focused_note :: proc(ed: ^ui.EditorState, path: string, last_saved: ^string
 		fmt.eprintln("Could not save note:", path, err)
 		return
 	}
+
 	delete(last_saved^)
 	last_saved^ = strings.clone(content)
 }
@@ -127,7 +129,10 @@ main :: proc() {
 	}
 	defer sdl.DestroyRenderer(renderer)
 	image_media: media.Manager
-	if !media.init(&image_media, renderer) { fmt.eprintln("Could not initialize image loading"); return }
+	if !media.init(
+		&image_media,
+		renderer,
+	) {fmt.eprintln("Could not initialize image loading"); return}
 	defer media.destroy(&image_media)
 
 	ui_assets, assets_ok := assets.load(renderer)
@@ -159,7 +164,9 @@ main :: proc() {
 			data_home = fmt.tprintf("%s/.local/share", home)
 		}
 	}
-	notes_dir := config.notebooks_path(data_home)
+	// Sync uses this path after the frame's temporary allocator is cleared.
+	notes_dir := strings.clone(config.notebooks_path(data_home))
+	defer delete(notes_dir)
 	first_run := !os.exists(notes_dir)
 	default_notebook := fmt.tprintf("%s/Default", notes_dir)
 	if first_run {
