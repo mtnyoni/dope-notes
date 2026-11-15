@@ -56,7 +56,7 @@ titlebar_hit_test :: proc "c" (window: ^sdl.Window, pos: ^sdl.Point) -> sdl.HitT
 	return .NORMAL
 }
 
-TitleBar :: proc(window: ^sdl.Window, ui_assets: ^assets.Manager) {
+TitleBar :: proc(window: ^sdl.Window, ui_assets: ^assets.Manager, settings_open: ^bool, menu_sync_pending: ^bool) {
 	if clay.UI(clay.ID("TitleBar"))(
 	{
 		layout = {
@@ -103,10 +103,13 @@ TitleBar :: proc(window: ^sdl.Window, ui_assets: ^assets.Manager) {
 			},
 		},
 		) {
-			TitleBarButton(window, ui_assets, "About", 3)
+			TitleBarButton(window, ui_assets, "Settings", 3, settings_open)
 			TitleBarButton(window, ui_assets, "Minimize", 0)
 			TitleBarButton(window, ui_assets, "Maximize", 1)
 			TitleBarButton(window, ui_assets, "Close", 2)
+		}
+		if settings_open != nil && settings_open^ {
+			SettingsMenu(window, settings_open, menu_sync_pending)
 		}
 	}
 }
@@ -116,6 +119,7 @@ TitleBarButton :: proc(
 	ui_assets: ^assets.Manager,
 	name: string,
 	action: int,
+	settings_open: ^bool = nil,
 ) {
 	if clay.UI(clay.ID(name))(
 	{
@@ -144,8 +148,7 @@ TitleBarButton :: proc(
 				}
 				_ = sdl.PushEvent(&event)
 			case 3:
-				message := fmt.tprintf("Dope Notes\nVersion %s", config.DISPLAY_VERSION)
-				_ = sdl.ShowSimpleMessageBox({.INFORMATION}, "About Dope Notes", strings.clone_to_cstring(message, context.temp_allocator), window)
+				if settings_open != nil do settings_open^ = !settings_open^
 			}
 		}
 		icon: assets.Icon = .Square
@@ -182,6 +185,47 @@ TitleBarButton :: proc(
 					image = {imageData = rawptr(texture)},
 				},
 				) {}
+			}
+		}
+	}
+}
+
+SettingsMenu :: proc(window: ^sdl.Window, settings_open: ^bool, menu_sync_pending: ^bool) {
+	if clay.UI(clay.ID("SettingsMenu"))({
+		layout = {
+			sizing = {width = clay.SizingFixed(112), height = clay.SizingFit()},
+			layoutDirection = .TopToBottom,
+			padding = clay.PaddingAll(4),
+		},
+		floating = {
+			attachTo = .ElementWithId,
+			parentId = clay.ID("Settings").id,
+			attachment = {element = .LeftTop, parent = .LeftBottom},
+			zIndex = 10,
+		},
+		backgroundColor = theme.White,
+		cornerRadius = clay.CornerRadiusAll(6),
+		border = clay.BorderElementConfig {width = clay.BorderWidth{left = 1, top = 1, right = 1, bottom = 1}, color = theme.Light.border},
+	}) {
+		items := [2]string{"Sync", "About"}
+		for label, index in items {
+			hovered := false
+			if clay.UI(clay.ID("SettingsMenuItem", u32(index)))({
+				layout = {sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(28)}, childAlignment = {y = .Center}, padding = clay.Padding{left = 8}},
+				backgroundColor = theme.White,
+				cornerRadius = clay.CornerRadiusAll(4),
+			}) {
+				hovered = clay.Hovered()
+				clay.Text(label, {fontSize = 12, textColor = theme.Light.text, wrapMode = .None})
+			}
+			if hovered && clay.GetPointerState().state == .PressedThisFrame {
+				settings_open^ = false
+				if index == 0 {
+					if menu_sync_pending != nil do menu_sync_pending^ = true
+				} else if window != nil {
+					message := fmt.tprintf("Dope Notes\nVersion %s", config.DISPLAY_VERSION)
+					_ = sdl.ShowSimpleMessageBox({.INFORMATION}, "About Dope Notes", strings.clone_to_cstring(message, context.temp_allocator), window)
+				}
 			}
 		}
 	}

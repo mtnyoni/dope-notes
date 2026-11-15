@@ -240,9 +240,12 @@ main :: proc() {
 	vsync_enabled := sdl.SetRenderVSync(renderer, 1)
 	previous_frame := sdl.GetTicksNS()
 	running := true
+	settings_open := false
+	menu_sync_pending := false
 	for running {
 		defer free_all(context.temp_allocator)
-		sync_requested := false
+		sync_requested := menu_sync_pending
+		menu_sync_pending = false
 		sdl.LockMutex(ticker.mutex)
 		save_due := ticker.pending
 		ticker.pending = false
@@ -388,6 +391,8 @@ main :: proc() {
 			},
 			delta_seconds,
 			window,
+			&settings_open,
+			&menu_sync_pending,
 		)
 		commands := clay.EndLayout(delta_seconds)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)

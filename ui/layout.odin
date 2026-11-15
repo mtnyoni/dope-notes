@@ -13,6 +13,8 @@ UILayout :: proc(
 	scroll_input: ScrollInput = {},
 	delta_seconds: f32 = 1.0 / 60.0,
 	window: ^sdl.Window = nil,
+	settings_open: ^bool = nil,
+	menu_sync_pending: ^bool = nil,
 ) {
 	maximized := window != nil && .MAXIMIZED in sdl.GetWindowFlags(window)
 	if clay.UI(clay.ID("Root"))(
@@ -30,7 +32,7 @@ UILayout :: proc(
 		},
 	},
 	) {
-		TitleBar(window, ui_assets)
+		TitleBar(window, ui_assets, settings_open, menu_sync_pending)
 		if clay.UI(clay.ID("MainArea"))(
 		{
 			layout = {
