@@ -72,14 +72,22 @@ GithubSyncWorker :: struct {
     notes_dir: string,
     done:      bool,
     success:   bool,
+    manual: bool,
+    result: SyncPreflight,
 }
 
 sync_github_worker :: proc "c" (data: rawptr) -> c.int {
     context = runtime.default_context()
     worker := cast(^GithubSyncWorker)data
-    success := sync_github(worker.notes_dir)
+    result := sync_preflight(worker.notes_dir)
+    success := false
+    if result == .Ready {success = sync_github(worker.notes_dir)}
+    if result == .AlreadySynced {fmt.println("Already synced")}
+    if result == .Offline {fmt.eprintln("GitHub is unreachable; sync skipped")}
+
     free_all(context.temp_allocator)
     sdl.LockMutex(worker.mutex)
+    worker.result = result
     worker.success = success
     worker.done = true
     sdl.UnlockMutex(worker.mutex)
@@ -90,6 +98,8 @@ update_github_sync :: proc(
     worker: ^GithubSyncWorker,
     sync_thread: ^^sdl.Thread,
     requested: bool,
+    manual: bool,
+    window: ^sdl.Window,
     app_state: ^state.AppState,
     documents: ^ui.EditorDocuments,
     editor_state: ^^ui.EditorState,
@@ -101,6 +111,8 @@ update_github_sync :: proc(
     sdl.LockMutex(worker.mutex)
     done := worker.done
     success := worker.success
+    result := worker.result
+    was_manual := worker.manual
     sdl.UnlockMutex(worker.mutex)
     if sync_thread^ != nil && done {
         sdl.WaitThread(sync_thread^, nil)
@@ -110,7 +122,13 @@ update_github_sync :: proc(
                 worker.notes_dir, app_state, documents, editor_state,
                 empty_editor, loaded_doc, last_saved, face,
             )
-        } else {
+        } else if result == .Offline && was_manual {
+            _ = sdl.ShowSimpleMessageBox(
+                {.WARNING}, "Sync unavailable",
+                "Cannot reach GitHub. Check your network connection and try again.",
+                window,
+            )
+        } else if result != .AlreadySynced && result != .Offline {
             fmt.eprintln("GitHub sync failed; see details above")
         }
     }
@@ -118,6 +136,7 @@ update_github_sync :: proc(
     if requested && sync_thread^ == nil {
         save_focused_note(editor_state^, loaded_doc^, last_saved)
         sdl.LockMutex(worker.mutex)
+        worker.manual = manual
         worker.done = false
         sdl.UnlockMutex(worker.mutex)
         sync_thread^ = sdl.CreateThread(
@@ -193,4 +212,36 @@ sync_github :: proc(notes_dir: string) -> bool {
 		if !run_sync_command(notes_dir, {"git", "rebase", "origin/main"}) do return false
 	}
 	return run_sync_command(notes_dir, {"git", "push", "-u", "origin", "main"})
+}
+
+SyncPreflight :: enum {Ready, AlreadySynced, Offline, Failed}
+
+sync_preflight :: proc(directory: string) -> SyncPreflight {
+    if os.exists(fmt.tprintf("%s/.git", directory)) {
+        status, changes, _, err := os.process_exec(
+            {working_dir = directory, command = {"git", "status", "--porcelain"}},
+            context.temp_allocator,
+        )
+        if err != nil || status.exit_code != 0 {return .Failed}
+        if len(strings.trim_space(string(changes))) == 0 {
+            ahead, commits, _, ahead_err := os.process_exec(
+                {working_dir = directory, command = {"git", "rev-list", "@{upstream}..HEAD"}},
+                context.temp_allocator,
+            )
+            if ahead_err == nil && ahead.exit_code == 0 && len(commits) == 0 {
+                return .AlreadySynced
+            }
+        }
+    }
+    probe, _, _, err := os.process_exec(
+        {command = {"curl", "--silent", "--show-error", "--head",
+            "--connect-timeout", "5", "--max-time", "8", "https://github.com"}},
+        context.temp_allocator,
+    )
+    if err != nil {
+        fmt.eprintln("Could not check GitHub connectivity; curl is required:", err)
+        return .Failed
+    }
+    if probe.exit_code != 0 {return .Offline}
+    return .Ready
 }

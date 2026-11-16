@@ -22,9 +22,9 @@ DEFAULT_WIN_W :: 1320
 DEFAULT_WIN_H :: 640
 
 SAVE_INTERVAL_MS :: 1000
+SCROLL_SPEED :: 7.2
 AUTO_SYNC_INTERVAL_NS :: 60 * 1_000_000_000
 NO_VSYNC_FRAME_DELAY_MS :: 16
-SCROLL_SPEED :: 7.2
 MIN_FRAME_DELTA :: 0.001
 MAX_FRAME_DELTA :: 0.1
 
@@ -217,12 +217,13 @@ app_init_workers :: proc(app: ^App) -> bool {
 }
 
 app_frame :: proc(app: ^App) {
+    manual_sync := app.menu_sync_pending
     delta_seconds, sync_requested := app_begin_frame(app)
 
     events := poll_frame_events(app.editor_state, &app.image_media)
     if events.quit {app.running = false}
 
-    app_sync_and_notes(app, sync_requested || events.sync_requested)
+    app_sync_and_notes(app, sync_requested || events.sync_requested, manual_sync || events.sync_requested)
     app_draw(app, events, delta_seconds)
 }
 
@@ -249,11 +250,13 @@ app_begin_frame :: proc(
     return
 }
 
-app_sync_and_notes :: proc(app: ^App, sync_requested: bool) {
+app_sync_and_notes :: proc(app: ^App, sync_requested: bool, manual: bool) {
     git_sync.update_github_sync(
         &app.sync_worker,
         &app.github_sync_thread,
         sync_requested,
+        manual,
+        app.window,
         &app.app_state,
         &app.documents,
         &app.editor_state,
