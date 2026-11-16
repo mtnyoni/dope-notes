@@ -1,5 +1,6 @@
 %{!?dope_notes_version:%global dope_notes_version 0.1.0}
 %{!?dope_notes_release:%global dope_notes_release 1}
+%{!?dope_notes_github_client_id:%global dope_notes_github_client_id %{nil}}
 %{!?odin_bin:%global odin_bin odin}
 
 Name:           dope-notes
@@ -18,7 +19,14 @@ BuildRequires:  gcc
 BuildRequires:  freetype-devel
 BuildRequires:  pkgconfig(sdl3)
 BuildRequires:  pkgconfig(sdl3-image)
-Requires:       curl
+BuildRequires:  cmake
+BuildRequires:  curl
+BuildRequires:  openssl-devel
+BuildRequires:  zlib-devel
+BuildRequires:  libcurl-devel
+BuildRequires:  libsecret-devel
+Requires:       ca-certificates
+Requires:       gnome-keyring
 
 
 %description
@@ -30,11 +38,16 @@ and FreeType.
 
 %build
 bash font/build.sh
+bash git-sync/build.sh
 mkdir -p odin_shared
 ln -sfnT ../shared/clay/bindings/odin/clay-odin odin_shared/clay
-%{odin_bin} build . \
+client_flags=()
+if [[ -n '%{dope_notes_github_client_id}' ]]; then
+    client_flags+=('-define:DOPE_NOTES_GITHUB_CLIENT_ID=%{dope_notes_github_client_id}')
+fi
+%{odin_bin} build . "${client_flags[@]}" \
     -define:DOPE_NOTES_DEV=false \
-    '-define:DOPE_NOTES_VERSION=%{version}' \
+    '-define:DOPE_NOTES_VERSION=%{version}-%{dope_notes_release}' \
     -collection:shared=./odin_shared \
     -out:dope-notes \
     -no-rpath \
@@ -59,7 +72,7 @@ install -Dm0644 packaging/icons/dope-notes.png \
 desktop-file-validate packaging/dope-notes.desktop
 
 %files
-%license LICENSE
+%license LICENSE .deps/libgit2-1.9.2/COPYING
 %doc README.md
 %{_bindir}/dope-notes
 %{_datadir}/applications/dope-notes.desktop

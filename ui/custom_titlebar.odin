@@ -270,6 +270,7 @@ SettingsDropdownMenuState :: struct {
 	sync_pending:       ^bool,
 	animation_progress: ^f32,
 	about: ^AboutDialogState,
+	github_setup: ^GithubSetupState,
 	toast: ^ToastState,
 }
 

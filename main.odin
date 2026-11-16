@@ -61,6 +61,8 @@ App :: struct {
     running:                bool,
     window:                 ^sdl.Window,
     toast: ui.ToastState,
+    github_setup: ui.GithubSetupState,
+    auth_worker: git_sync.AuthWorker,
     about_dialog: ui.AboutDialogState,
     settings_open:          bool,
     titlebar_clickable:     bool,
@@ -101,6 +103,12 @@ main :: proc() {
     mem.tracking_allocator_init(&track, context.allocator)
     context.allocator = mem.tracking_allocator(&track)
     defer mem.tracking_allocator_destroy(&track)
+
+    if !git_sync.native_init() {
+        fmt.eprintln("Could not initialize GitHub sync")
+        return
+    }
+    defer git_sync.native_shutdown()
 
     app: App
     defer app_destroy(&app)
@@ -215,23 +223,25 @@ app_init_workers :: proc(app: ^App) -> bool {
         notes_dir = app.notes_dir,
     }
     assert(app.sync_worker.mutex != nil)
+    app.auth_worker.mutex = sdl.CreateMutex()
+    assert(app.auth_worker.mutex != nil)
     app.stage = .Sync_Worker
     return true
 }
 
 app_frame :: proc(app: ^App) {
-    app.titlebar_clickable = app.settings_open || app.about_dialog.open ||
+    app.titlebar_clickable = app.settings_open || app.github_setup.open || app.about_dialog.open ||
         app.about_dialog.animation_progress > 0
     manual_sync := app.menu_sync_pending
     delta_seconds, sync_requested := app_begin_frame(app)
 
-    events := poll_frame_events(app.editor_state, &app.image_media, app.about_dialog.open || app.about_dialog.animation_progress > 0)
+    events := poll_frame_events(app.editor_state, &app.image_media, app.github_setup.open || app.about_dialog.open || app.about_dialog.animation_progress > 0, &app.github_setup)
     if events.quit {app.running = false}
-    if events.dismiss_dialog {app.about_dialog.open = false}
+    if events.dismiss_dialog {app.about_dialog.open = false; app.github_setup.open = false}
 
     app_sync_and_notes(app, sync_requested || events.sync_requested, manual_sync || events.sync_requested)
     app_draw(app, events, delta_seconds)
-    app.titlebar_clickable = app.settings_open || app.about_dialog.open ||
+    app.titlebar_clickable = app.settings_open || app.github_setup.open || app.about_dialog.open ||
         app.about_dialog.animation_progress > 0
 }
 
@@ -259,12 +269,12 @@ app_begin_frame :: proc(
 }
 
 app_sync_and_notes :: proc(app: ^App, sync_requested: bool, manual: bool) {
+    git_sync.update_github_setup(&app.auth_worker, &app.github_setup, &app.menu_sync_pending)
     git_sync.update_github_sync(
         &app.sync_worker,
         &app.github_sync_thread,
         sync_requested,
         manual,
-        app.window,
         &app.app_state,
         &app.documents,
         &app.editor_state,
@@ -273,6 +283,7 @@ app_sync_and_notes :: proc(app: ^App, sync_requested: bool, manual: bool) {
         &app.last_saved,
         app.face,
         &app.toast,
+        &app.github_setup,
     )
 
     state.update_note_content(
@@ -332,6 +343,7 @@ app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
             sync_pending = &app.menu_sync_pending,
             animation_progress = &app.settings_menu_progress,
             about = &app.about_dialog,
+            github_setup = &app.github_setup,
             toast = &app.toast,
         },
     )
@@ -343,6 +355,8 @@ app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
 app_destroy :: proc(app: ^App) {
     ui.destroy_toast(&app.toast)
     if app.stage >= .Sync_Worker {
+        if app.auth_worker.thread != nil {sdl.WaitThread(app.auth_worker.thread, nil)}
+        sdl.DestroyMutex(app.auth_worker.mutex)
         sync_worker_stop(&app.sync_worker, app.github_sync_thread)
     }
     if app.stage >= .Text_Input {stop_text_input(app.window)}

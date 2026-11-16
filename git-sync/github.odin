@@ -74,17 +74,31 @@ GithubSyncWorker :: struct {
     success:   bool,
     manual: bool,
     result: SyncPreflight,
+    error: [1024]u8,
 }
 
 sync_github_worker :: proc "c" (data: rawptr) -> c.int {
     context = runtime.default_context()
     worker := cast(^GithubSyncWorker)data
-    result := sync_preflight(worker.notes_dir)
+    result := SyncPreflight.Failed
     success := false
-    if result == .Ready {success = sync_github(worker.notes_dir)}
-    if result == .AlreadySynced {fmt.println("Already synced")}
-    if result == .Offline {fmt.eprintln("GitHub is unreachable; sync skipped")}
-
+    settings, configured := config.load_github_settings()
+    if !configured {result = .NeedsSetup}
+    else {
+        token, error := load_token()
+        if token == "" {result = .NeedsSetup; copy_text(worker.error[:], error)}
+        else {
+            code := dn_sync(cstr(worker.notes_dir),
+                cstr(fmt.tprintf("https://github.com/%s.git", settings.repository)),
+                cstr(settings.branch), cstr(token), cstr(settings.author_name),
+                cstr(settings.author_email), &worker.error[0], len(worker.error))
+            if code == 0 {success = true; result = .Ready}
+            else if code == 1 {result = .AlreadySynced; fmt.println("Already synced")}
+            else if code == -2 {result = .Offline}
+            else if code == -3 {result = .NeedsSetup; copy_text(worker.error[:], "GitHub session expired. Please sign in again.")}
+            else {fmt.eprintln("GitHub sync failed:", string(cstring(&worker.error[0])))}
+        }
+    }
     free_all(context.temp_allocator)
     sdl.LockMutex(worker.mutex)
     worker.result = result
@@ -99,7 +113,6 @@ update_github_sync :: proc(
     sync_thread: ^^sdl.Thread,
     requested: bool,
     manual: bool,
-    window: ^sdl.Window,
     app_state: ^state.AppState,
     documents: ^ui.EditorDocuments,
     editor_state: ^^ui.EditorState,
@@ -108,8 +121,10 @@ update_github_sync :: proc(
     last_saved: ^string,
     face: ^font.Font,
     toast: ^ui.ToastState,
+    setup: ^ui.GithubSetupState,
 ) {
     sdl.LockMutex(worker.mutex)
+    if requested && manual && sync_thread^ != nil {worker.manual = true}
     done := worker.done
     success := worker.success
     result := worker.result
@@ -118,10 +133,16 @@ update_github_sync :: proc(
     if sync_thread^ != nil && done {
         sdl.WaitThread(sync_thread^, nil)
         sync_thread^ = nil
-        if was_manual {
+        if was_manual && result == .NeedsSetup {
+            setup.open = true
+            setup.just_opened = true
+            setup.phase = .Welcome
+            if worker.error[0] != 0 {copy_text(setup.error[:], string(cstring(&worker.error[0])))}
+        }
+        if was_manual && result != .NeedsSetup {
             if success || result == .AlreadySynced {ui.show_toast(toast, "Synced")}
             else if result == .Offline {ui.show_toast(toast, "No connection to GitHub. Try again later.", .CircleExclamation)}
-            else {ui.show_toast(toast, "GitHub sync failed", .CircleExclamation)}
+            else {ui.show_toast(toast, string(cstring(&worker.error[0])), .CircleExclamation)}
         }
         if success {
             reload_synced_notes(
@@ -136,6 +157,7 @@ update_github_sync :: proc(
     if requested && sync_thread^ == nil {
         save_focused_note(editor_state^, loaded_doc^, last_saved)
         sdl.LockMutex(worker.mutex)
+        worker.error = {}
         worker.manual = manual
         worker.done = false
         sdl.UnlockMutex(worker.mutex)
@@ -148,100 +170,5 @@ update_github_sync :: proc(
     }
 }
 
-run_sync_command :: proc(directory: string, command: []string) -> bool {
-	state, stdout, stderr, err := os.process_exec(
-		{working_dir = directory, command = command},
-		context.temp_allocator,
-	)
-	if err != nil {
-		fmt.eprintln("GitHub sync command failed:", command, err)
-		return false
-	}
 
-	if state.exit_code != 0 {
-		fmt.eprintln("GitHub sync command failed:", command, string(stderr), string(stdout))
-		return false
-	}
-	return true
-}
-
-sync_github :: proc(notes_dir: string) -> bool {
-	repo := config.github_repo()
-	if repo == "" || strings.count(repo, "/") != 1 {
-		fmt.eprintln("Set DOPE_NOTES_GITHUB_REPO=owner/repo to enable GitHub sync")
-		return false
-	}
-	if !run_sync_command(notes_dir, {"gh", "auth", "status"}) do return false
-	if !run_sync_command(notes_dir, {"gh", "repo", "view", repo, "--json", "nameWithOwner"}) do return false
-	if !os.exists(fmt.tprintf("%s/.git", notes_dir)) {
-		if !run_sync_command(notes_dir, {"git", "init"}) do return false
-		if !run_sync_command(notes_dir, {"git", "branch", "-M", "main"}) do return false
-		if !run_sync_command(notes_dir, {"git", "remote", "add", "origin", fmt.tprintf("https://github.com/%s.git", repo)}) do return false
-	}
-	remote_state, remote_url, _, remote_err := os.process_exec(
-		{working_dir = notes_dir, command = {"git", "remote", "get-url", "origin"}},
-		context.temp_allocator,
-	)
-	if remote_err != nil ||
-	   remote_state.exit_code != 0 ||
-	   strings.trim_space(string(remote_url)) != fmt.tprintf("https://github.com/%s.git", repo) {
-		fmt.eprintln("Notes directory origin does not match DOPE_NOTES_GITHUB_REPO")
-		return false
-	}
-	// GitHub CLI supplies Git's credentials through the active login.
-	if !run_sync_command(notes_dir, {"gh", "auth", "setup-git"}) do return false
-	if !run_sync_command(notes_dir, {"git", "add", "--", "."}) do return false
-	change_state, _, _, change_err := os.process_exec(
-		{working_dir = notes_dir, command = {"git", "diff", "--cached", "--quiet"}},
-		context.temp_allocator,
-	)
-	if change_err != nil || change_state.exit_code > 1 do return false
-	if change_state.exit_code == 1 {
-		if !run_sync_command(notes_dir, {"git", "commit", "-m", "Sync notes"}) do return false
-	}
-	branch_state, remote_output, remote_error, branch_err := os.process_exec(
-		{working_dir = notes_dir, command = {"git", "ls-remote", "--heads", "origin", "main"}},
-		context.temp_allocator,
-	)
-	if branch_err != nil || branch_state.exit_code != 0 {
-		fmt.eprintln("Could not inspect remote branch:", branch_err, string(remote_error))
-		return false
-	}
-	if len(remote_output) > 0 {
-		if !run_sync_command(notes_dir, {"git", "fetch", "origin", "main"}) do return false
-		if !run_sync_command(notes_dir, {"git", "rebase", "origin/main"}) do return false
-	}
-	return run_sync_command(notes_dir, {"git", "push", "-u", "origin", "main"})
-}
-
-SyncPreflight :: enum {Ready, AlreadySynced, Offline, Failed}
-
-sync_preflight :: proc(directory: string) -> SyncPreflight {
-    if os.exists(fmt.tprintf("%s/.git", directory)) {
-        status, changes, _, err := os.process_exec(
-            {working_dir = directory, command = {"git", "status", "--porcelain"}},
-            context.temp_allocator,
-        )
-        if err != nil || status.exit_code != 0 {return .Failed}
-        if len(strings.trim_space(string(changes))) == 0 {
-            ahead, commits, _, ahead_err := os.process_exec(
-                {working_dir = directory, command = {"git", "rev-list", "@{upstream}..HEAD"}},
-                context.temp_allocator,
-            )
-            if ahead_err == nil && ahead.exit_code == 0 && len(commits) == 0 {
-                return .AlreadySynced
-            }
-        }
-    }
-    probe, _, _, err := os.process_exec(
-        {command = {"curl", "--silent", "--show-error", "--head",
-            "--connect-timeout", "5", "--max-time", "8", "https://github.com"}},
-        context.temp_allocator,
-    )
-    if err != nil {
-        fmt.eprintln("Could not check GitHub connectivity; curl is required:", err)
-        return .Failed
-    }
-    if probe.exit_code != 0 {return .Offline}
-    return .Ready
-}
+SyncPreflight :: enum {Ready, AlreadySynced, Offline, Failed, NeedsSetup}

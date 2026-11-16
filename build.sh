@@ -23,6 +23,7 @@ if ! pkg-config --exists sdl3; then
 fi
 
 bash "$project_dir/font/build.sh"
+bash "$project_dir/git-sync/build.sh"
 
 
 mkdir -p "$output_dir"
@@ -43,7 +44,7 @@ esac
 mkdir -p "$project_dir/odin_shared"
 ln -sfnT ../shared/clay/bindings/odin/clay-odin "$project_dir/odin_shared/clay"
 
-odin build "$project_dir" \
+bash "$project_dir/tools/odin.sh" build "$project_dir" \
 	"-collection:shared=$project_dir/odin_shared" \
 	"-out:$output_dir/dope-notes" \
 	-no-rpath \

@@ -10,10 +10,10 @@ if $install; then
   sudo_cmd=()
   if [[ "$EUID" != 0 ]]; then sudo_cmd=(sudo); fi
   if command -v dnf >/dev/null 2>&1; then
-    "${sudo_cmd[@]}" dnf install -y git clang binutils pkgconf-pkg-config SDL3-devel SDL3_image-devel cmark-devel freetype-devel
+    "${sudo_cmd[@]}" dnf install -y git cmake curl clang binutils openssl-devel libcurl-devel libsecret-devel zlib-devel pkgconf-pkg-config SDL3-devel SDL3_image-devel cmark-devel freetype-devel
   elif command -v apt-get >/dev/null 2>&1; then
     "${sudo_cmd[@]}" apt-get update
-    "${sudo_cmd[@]}" apt-get install -y git build-essential clang pkg-config libfreetype6-dev libcmark-dev libsdl3-dev libsdl3-image-dev
+    "${sudo_cmd[@]}" apt-get install -y git cmake curl libssl-dev libcurl4-openssl-dev libsecret-1-dev zlib1g-dev build-essential clang pkg-config libfreetype6-dev libcmark-dev libsdl3-dev libsdl3-image-dev
   else
     echo 'Unsupported package manager. Install the README prerequisites, then rerun with --skip-install.' >&2
     exit 1

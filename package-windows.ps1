@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')]
+    [ValidatePattern('^\d+\.\d+\.\d+(-\d+)?$')]
     [string]$Version = (Get-Content (Join-Path $PSScriptRoot 'VERSION') -Raw).Trim(),
     [string]$IsccPath
 )

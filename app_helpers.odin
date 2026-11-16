@@ -82,12 +82,14 @@ poll_frame_events :: proc(
     editor: ^ui.EditorState,
     image_media: ^media.Manager,
     modal_open := false,
+    github_setup: ^ui.GithubSetupState = nil,
 ) -> FrameEvents {
     result: FrameEvents
     editor.media = image_media
     event: sdl.Event
     for sdl.PollEvent(&event) {
-        if event.type == .KEY_DOWN &&
+        if github_setup != nil {ui.github_setup_handle_event(github_setup, &event)}
+        if !modal_open && event.type == .KEY_DOWN &&
            event.key.key == sdl.K_G &&
            sdl.KMOD_CTRL & event.key.mod != {} &&
            sdl.KMOD_SHIFT & event.key.mod != {} {

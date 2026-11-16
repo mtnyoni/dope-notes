@@ -1,6 +1,8 @@
 param([switch]$Release)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+. (Join-Path $root 'tools/build-env.ps1')
+& (Join-Path $root 'git-sync/build.ps1')
 if (-not $env:VCPKG_ROOT) { $env:VCPKG_ROOT = Join-Path $root '.deps/vcpkg' }
 $triplet = 'x64-windows'
 $installed = Join-Path $env:VCPKG_ROOT "installed/$triplet"
@@ -46,7 +48,8 @@ $flags = if ($Release) { @('-o:speed', '-define:DOPE_NOTES_DEV=false') } else { 
 $icon = (Join-Path $root 'packaging/icons/dope-notes.ico').Replace('\', '/')
 $resource = Join-Path $out 'dope-notes.rc'
 Set-Content -LiteralPath $resource -Value "1 ICON `"$icon`"" -Encoding ASCII
-& odin build $root "-collection:shared=$shared" "-out:$out/dope-notes.exe" '-subsystem:windows' "-resource:$resource" "-extra-linker-flags:/LIBPATH:$lib" @flags
+$clientFlags = if ($env:DOPE_NOTES_GITHUB_CLIENT_ID) { @("-define:DOPE_NOTES_GITHUB_CLIENT_ID=$($env:DOPE_NOTES_GITHUB_CLIENT_ID)") } else { @() }
+& odin build $root @clientFlags "-collection:shared=$shared" "-out:$out/dope-notes.exe" '-subsystem:windows' "-resource:$resource" "-extra-linker-flags:/LIBPATH:$lib" @flags
 if ($LASTEXITCODE -ne 0) { throw 'Odin build failed.' }
 Copy-Item "$bin/*.dll" $out -Force
 Copy-Item (Join-Path $root 'assets') $out -Recurse -Force

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$project_dir/tools/build-env.sh"
 build_dir="$project_dir/build"
 package_dir="$build_dir/packages"
 source_dir="$build_dir/sources"
@@ -59,12 +60,14 @@ if ! $source_only && [[ -z "$odin_bin" ]]; then
 	exit 1
 fi
 
+bash "$project_dir/git-sync/build.sh" --fetch-only
 source_archive="$source_dir/dope-notes-$version.tar.gz"
 source_date_epoch="$(git -C "$project_dir" log -1 --format=%ct 2>/dev/null || date +%s)"
 {
+    printf '%s\0' .deps/libgit2-1.9.2
 	git -C "$project_dir" ls-files -z --cached --others --exclude-standard |
 		while IFS= read -r -d '' path; do
-			[[ "$path" == build/* || "$path" == odin_shared/* || "$path" == shared/clay ]] && continue
+			[[ "$path" == .env || "$path" == build/* || "$path" == odin_shared/* || "$path" == shared/clay ]] && continue
 			[[ -e "$project_dir/$path" ]] && printf '%s\0' "$path"
 		done
 	git -C "$project_dir/shared/clay" ls-files -z |
@@ -112,7 +115,11 @@ if $source_only; then
 	rpmbuild_mode="-bs"
 fi
 
-rpmbuild \
+rpm_client_flags=()
+if [[ -n "${DOPE_NOTES_GITHUB_CLIENT_ID:-}" ]]; then
+    rpm_client_flags+=(--define "dope_notes_github_client_id $DOPE_NOTES_GITHUB_CLIENT_ID")
+fi
+rpmbuild "${rpm_client_flags[@]}" \
 	--define "_topdir $rpm_topdir" \
 	--define "_tmppath /tmp" \
 	--define "dope_notes_version $version" \

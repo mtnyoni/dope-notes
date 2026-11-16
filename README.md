@@ -375,6 +375,80 @@ odin test ui/clay -collection:shared=./odin_shared
 
 ## GitHub notebook sync
 
-Install [GitHub CLI](https://cli.github.com/) and Git, then sign in with `gh auth login`. Set `DOPE_NOTES_GITHUB_REPO` to the target `owner/repo` before starting Dope Notes. Configure your Git commit identity (`git config --global user.name` and `git config --global user.email`). Press **Ctrl+Shift+G** in the app to save the active note, pull the repository's `main` branch, and push the notebooks. The app uses the currently authenticated `gh` account and stores no GitHub token. Sync results and errors appear in the launching terminal.
+Users do not need Git or GitHub CLI installed. libgit2 is built statically into
+Dope Notes. HTTPS uses libcurl/OpenSSL on Linux and WinHTTP on Windows. Linux
+RPM dependencies install the HTTPS and keyring runtime libraries automatically.
 
-Use a repository dedicated to notebooks. On the first sync, an empty repository is simplest; an existing `main` branch must have compatible history. If Git reports a conflict, resolve it in the notebook storage directory before syncing again. Sync is manual and runs on the app's main thread, so the window may pause during network operations.
+Click **Settings → Sync** (or **Ctrl+Shift+G**). On first use, the app opens a
+GitHub sign-in dialog. Click **Sign in with GitHub**, enter the displayed device
+code in your browser, and authorize the app. Then enter a private repository as
+`owner/name` and a branch, normally `main`. Connect an existing notes repo or
+click **Create private repository** to create a new empty repo under your account.
+Use a separate repository for notes, not the app source repository.
+
+The session token stays in Windows Credential Manager or Linux Secret Service
+(the desktop keyring). Repository, branch, and commit identity are saved in
+`github.json` under `%APPDATA%/<APPLICATION_ID>/` on Windows or
+`$XDG_CONFIG_HOME/<APPLICATION_ID>/` (default `~/.config/<APPLICATION_ID>/`) on
+Linux. Development and release builds use separate application IDs and settings.
+Dope Notes never writes a token to the repo, a JSON settings file, or `.env`.
+A Linux desktop must have a working Secret Service provider, such as GNOME
+Keyring. If it is unavailable or locked, sign-in reports that error instead of
+saving the token in plain text.
+
+Sync runs on a worker thread, at launch and every minute when configured.
+Manual sync always reports its result in a toast. When there are no local file
+changes or unpushed commits, it reports **Synced** without contacting GitHub.
+Consequently a clean laptop does not poll for remote-only changes. Fetching and
+pushing happen when there is local work to sync. Network failure skips the
+network sync and preserves local notes. Diverged histories stop with an error;
+no automatic merge or forced overwrite is performed. Start with an empty repo
+when uploading existing local notes. An empty local folder can fetch an existing
+notes history. Signing in through a ChatGPT GitHub connector is separate from
+signing into Dope Notes.
+
+### Developer configuration
+
+Create a GitHub **OAuth App**, enable **Device Flow** in its settings, and copy
+its public Client ID. No Client Secret is used by the desktop device flow.
+
+Copy `.env.example` to `.env` and set:
+
+```dotenv
+DOPE_NOTES_GITHUB_CLIENT_ID=YOUR_PUBLIC_OAUTH_CLIENT_ID
+```
+
+Do not put an access token or Client Secret in this file. `.env` is ignored by
+Git and excluded from the source RPM. `DOPE_NOTES_GITHUB_REPO` and `gh auth login`
+are no longer used. Users choose their repository inside the app.
+
+On Fedora, install the build dependencies once:
+
+```bash
+sudo dnf install cmake clang curl openssl-devel libcurl-devel libsecret-devel zlib-devel
+```
+
+Then run `just run`, `just build`, or `just package`. These commands load the
+local `.env` and compile the public Client ID into the app. `bash build.sh`
+also loads it. `VERSION` still controls the application/package version.
+Packaged users do not need a `.env` file. A runtime
+`DOPE_NOTES_GITHUB_CLIENT_ID` environment variable overrides the compiled ID for
+development. Without a Client ID, the app still builds and opens; attempting
+sign-in displays a configuration message.
+
+On Windows, install CMake alongside the existing Visual Studio/LLVM/vcpkg build
+tools. `./build.ps1` reads the same `.env`, builds libgit2 statically using
+WinHTTP, and embeds the Client ID. `./package-windows.ps1` uses that build and
+bundles the existing SDL/FreeType runtime DLLs. No Git/libgit2 DLL or CLI is needed
+on the recipient machine. Windows build and keyring behavior require verification
+on Windows; they cannot be exercised by the Linux build.
+
+`git-sync/build.sh` and `git-sync/build.ps1` fetch pinned libgit2 **1.9.2** sources
+into `.deps/` and compile a C bridge against those exact headers. The bridge owns
+libgit2 option structs; there are no guessed struct layouts in Odin. The source
+RPM contains those sources, so its build does not download libgit2. The public
+Client ID is passed as a build define, never a credential.
+
+Run `just sync-test` for native sync regression tests using temporary local
+repositories. End-to-end GitHub OAuth still needs your Client ID and browser
+authorization.

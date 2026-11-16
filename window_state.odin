@@ -53,7 +53,7 @@ load_window_state :: proc() -> WindowState {
 save_window_state :: proc(saved: WindowState) {
     directory := window_state_directory()
     if directory == "" {return}
-    if err := os.make_directory_all(directory); err != nil {return}
+    if err := os.make_directory_all(directory); err != nil && err != .Exist {return}
     data, err := json.marshal(saved, allocator = context.temp_allocator)
     if err != nil {return}
     if write_err := os.write_entire_file(

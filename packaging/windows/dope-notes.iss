@@ -8,6 +8,7 @@
 AppId={{4B00A3D7-4B79-4E02-8E10-A76626B74BF2}
 AppName=Dope Notes
 AppVersion={#AppVersion}
+VersionInfoVersion={#StringChange(AppVersion, "-", ".")}
 AppPublisher=mtnyoni
 AppPublisherURL=https://github.com/mtnyoni/dope-notes
 DefaultDirName={localappdata}\Programs\Dope Notes
@@ -36,6 +37,7 @@ Source: "{#AppFiles}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#AppFiles}\assets\icons\*.png"; DestDir: "{app}\assets\icons"; Flags: ignoreversion
 Source: "{#AppFiles}\font\Roboto-Regular.ttf"; DestDir: "{app}\font"; Flags: ignoreversion
 Source: "{#AppFiles}\packaging\icons\dope-notes.png"; DestDir: "{app}\packaging\icons"; Flags: ignoreversion
+Source: "{#ProjectRoot}\.deps\libgit2-1.9.2\COPYING"; DestDir: "{app}"; DestName: "libgit2-COPYING"; Flags: ignoreversion
 Source: "{#ProjectRoot}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
