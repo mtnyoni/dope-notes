@@ -80,7 +80,8 @@ main :: proc() {
 	)
 	assert(window != nil)
 	defer sdl.DestroyWindow(window)
-	sdl.SetWindowHitTest(window, ui.window_hit_test, nil)
+	settings_open := false
+	sdl.SetWindowHitTest(window, ui.window_hit_test, &settings_open)
 
 	icon := img.Load(assets.resource_path("packaging/icons/dope-notes.png"))
 	when ODIN_OS == .Linux {
@@ -240,7 +241,6 @@ main :: proc() {
 	vsync_enabled := sdl.SetRenderVSync(renderer, 1)
 	previous_frame := sdl.GetTicksNS()
 	running := true
-	settings_open := false
 	settings_menu_progress: f32 = 0
 	menu_sync_pending := false
 	next_auto_sync := sdl.GetTicksNS()
@@ -342,7 +342,7 @@ main :: proc() {
 			cursor := default_cursor
 			if sdl.GetMouseFocus() == window {
 				point := sdl.Point{i32(mouse_x), i32(mouse_y)}
-				hit := ui.window_hit_test(window, &point, nil)
+				hit := ui.window_hit_test(window, &point, &settings_open)
 				#partial switch hit {
 				case .RESIZE_TOPLEFT, .RESIZE_BOTTOMRIGHT:
 					cursor = resize_nwse
@@ -397,7 +397,11 @@ main :: proc() {
 			},
 			delta_seconds,
 			window,
-			{open = &settings_open, sync_pending = &menu_sync_pending, animation_progress = &settings_menu_progress},
+			{
+				open = &settings_open,
+				sync_pending = &menu_sync_pending,
+				animation_progress = &settings_menu_progress,
+			},
 		)
 		commands := clay.EndLayout(delta_seconds)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)

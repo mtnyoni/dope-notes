@@ -33,9 +33,10 @@ window_hit_test :: proc "c" (
 		TITLEBAR_CONTROLS_WIDTH -
 		TITLEBAR_HORIZONTAL_PADDING -
 		(.MAXIMIZED in sdl.GetWindowFlags(window) ? 0 : WINDOW_OUTER_PADDING)
+	menu_open := data != nil && (cast(^bool)data)^
 
 	if .MAXIMIZED in sdl.GetWindowFlags(window) {
-		if pos.y < TITLEBAR_HEIGHT && pos.x < controls_left do return .DRAGGABLE
+		if !menu_open && pos.y < TITLEBAR_HEIGHT && pos.x < controls_left do return .DRAGGABLE
 		return .NORMAL
 	}
 
@@ -57,7 +58,7 @@ window_hit_test :: proc "c" (
 	if bottom do return .RESIZE_BOTTOM
 	if left do return .RESIZE_LEFT
 	if right do return .RESIZE_RIGHT
-	if pos.y < TITLEBAR_HEIGHT && pos.x < controls_left do return .DRAGGABLE
+	if !menu_open && pos.y < TITLEBAR_HEIGHT && pos.x < controls_left do return .DRAGGABLE
 
 	return .NORMAL
 }
@@ -134,10 +135,57 @@ TitleBar :: proc(
 			},
 		},
 		) {
-			TitleBarButton(window, ui_assets, "Settings", .TOGGLE_SETTINGS, settings_state.open)
-			TitleBarButton(window, ui_assets, "Minimize", .MINIMIZE)
-			TitleBarButton(window, ui_assets, "Maximize", .MAXIMIZE)
-			TitleBarButton(window, ui_assets, "Close", .CLOSE)
+			TitleBarButton(ui_assets, {
+				name = "Settings",
+				corner_radius = 6,
+				icon = .Settings,
+				on_click = proc(data: rawptr) {
+					if data == nil do return
+					open := cast(^bool)data
+					open^ = !open^
+				},
+				on_click_data = settings_state.open,
+			})
+
+			TitleBarButton(ui_assets, {
+				name = "Minimize",
+				corner_radius = 14,
+				icon = .Minus,
+				on_click = proc(data: rawptr) {
+					if data != nil do _ = sdl.MinimizeWindow(cast(^sdl.Window)data)
+				},
+				on_click_data = window,
+			})
+
+			maximize_icon: assets.Icon =
+				window != nil && .MAXIMIZED in sdl.GetWindowFlags(window) ? .SquaresUnite : .Square
+			TitleBarButton(ui_assets, {
+				name = "Maximize",
+				corner_radius = 14,
+				icon = maximize_icon,
+				on_click = proc(data: rawptr) {
+					window := cast(^sdl.Window)data
+					if window == nil do return
+					if .MAXIMIZED in sdl.GetWindowFlags(window) {
+						_ = sdl.RestoreWindow(window)
+					} else {
+						_ = sdl.MaximizeWindow(window)
+					}
+				},
+				on_click_data = window,
+			})
+
+			TitleBarButton(ui_assets, {
+				name = "Close",
+				corner_radius = 14,
+				icon = .X,
+				on_click = proc(data: rawptr) {
+					event := sdl.Event {
+						type = .QUIT,
+					}
+					_ = sdl.PushEvent(&event)
+				},
+			})
 		}
 
 		if settings_state.animation_progress != nil {
@@ -161,21 +209,17 @@ TitleBar :: proc(
 	}
 }
 
-TitleButtonAction :: enum {
-	MINIMIZE        = 0,
-	MAXIMIZE        = 1,
-	CLOSE           = 2,
-	TOGGLE_SETTINGS = 3,
+TitleButtonCallback :: proc(data: rawptr)
+TitleBarButtonConfig :: struct {
+	name:          string,
+	icon:          assets.Icon,
+	on_click:      TitleButtonCallback,
+	on_click_data: rawptr,
+	corner_radius: f32,
 }
 
-TitleBarButton :: proc(
-	window: ^sdl.Window,
-	ui_assets: ^assets.Manager,
-	name: string,
-	action: TitleButtonAction,
-	settings_open: ^bool = nil,
-) {
-	if clay.UI(clay.ID(name))(
+TitleBarButton :: proc(ui_assets: ^assets.Manager, config: TitleBarButtonConfig) {
+	if clay.UI(clay.ID(config.name))(
 	{
 		layout = clay.LayoutConfig {
 			sizing = clay.Sizing {
@@ -186,41 +230,12 @@ TitleBarButton :: proc(
 		},
 	},
 	) {
-		icon: assets.Icon = .Square
-		hovered := clay.Hovered()
-		clicked := window != nil && hovered && clay.GetPointerState().state == .PressedThisFrame
+		face_id := clay.ID("TitleBarButtonFace", clay.ID(config.name).id)
+		hovered := clay.Hovered() || clay.PointerOver(face_id)
+		clicked := hovered && clay.GetPointerState().state == .PressedThisFrame
+		if clicked && config.on_click != nil do config.on_click(config.on_click_data)
 
-		switch action {
-		case .MINIMIZE:
-			icon = .Minus
-			if clicked do _ = sdl.MinimizeWindow(window)
-
-		case .MAXIMIZE:
-			icon =
-				window != nil && .MAXIMIZED in sdl.GetWindowFlags(window) ? .SquaresUnite : .Square
-			if clicked {
-				if .MAXIMIZED in sdl.GetWindowFlags(window) {
-					_ = sdl.RestoreWindow(window)
-				} else {
-					_ = sdl.MaximizeWindow(window)
-				}
-			}
-
-		case .CLOSE:
-			icon = .X
-			if clicked {
-				event := sdl.Event {
-					type = .QUIT,
-				}
-				_ = sdl.PushEvent(&event)
-			}
-
-		case .TOGGLE_SETTINGS:
-			icon = .Settings
-			if clicked && settings_open != nil do settings_open^ = !settings_open^
-		}
-
-		if clay.UI(clay.ID("TitleBarButtonFace", u32(action)))(
+		if clay.UI(face_id)(
 		{
 			layout = clay.LayoutConfig {
 				sizing = clay.Sizing {
@@ -230,10 +245,10 @@ TitleBarButton :: proc(
 				childAlignment = {x = .Center, y = .Center},
 			},
 			backgroundColor = hovered ? theme.Gray_200 : clay.Color{},
-			cornerRadius = clay.CornerRadiusAll(action == .TOGGLE_SETTINGS ? 6 : 14),
+			cornerRadius = clay.CornerRadiusAll(config.corner_radius),
 		},
 		) {
-			if texture := assets.get(ui_assets, icon); texture != nil {
+			if texture := assets.get(ui_assets, config.icon); texture != nil {
 				if clay.UI()(
 				{
 					layout = clay.LayoutConfig {
