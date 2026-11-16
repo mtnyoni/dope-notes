@@ -94,7 +94,10 @@ sync_github_worker :: proc "c" (data: rawptr) -> c.int {
                 cstr(settings.author_email), &worker.error[0], len(worker.error))
             if code == 0 {success = true; result = .Ready}
             else if code == 1 {result = .AlreadySynced; fmt.println("Already synced")}
-            else if code == -2 {result = .Offline}
+            else if code == -2 {
+                result = .Offline
+                fmt.eprintln("GitHub connectivity check failed:", string(cstring(&worker.error[0])))
+            }
             else if code == -3 {result = .NeedsSetup; copy_text(worker.error[:], "GitHub session expired. Please sign in again.")}
             else {fmt.eprintln("GitHub sync failed:", string(cstring(&worker.error[0])))}
         }
@@ -141,7 +144,7 @@ update_github_sync :: proc(
         }
         if was_manual && result != .NeedsSetup {
             if success || result == .AlreadySynced {ui.show_toast(toast, "Synced")}
-            else if result == .Offline {ui.show_toast(toast, "No connection to GitHub. Try again later.", .CircleExclamation)}
+            else if result == .Offline {ui.show_toast(toast, string(cstring(&worker.error[0])), .CircleExclamation)}
             else {ui.show_toast(toast, string(cstring(&worker.error[0])), .CircleExclamation)}
         }
         if success {

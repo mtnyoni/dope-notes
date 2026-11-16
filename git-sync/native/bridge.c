@@ -152,6 +152,7 @@ int dn_http(const char *method, const char *url, const char *token, const char *
     curl_easy_setopt(c, CURLOPT_USERAGENT, "DopeNotes");
     curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, method);
+    if (!strcmp(method, "HEAD")) curl_easy_setopt(c, CURLOPT_NOBODY, 1L);
     curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 5L);
     curl_easy_setopt(c, CURLOPT_TIMEOUT, 20L);
     curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
