@@ -21,6 +21,7 @@ AboutDialog :: proc(dialog: ^AboutDialogState, delta_seconds: f32) {
     if !dialog.open && dialog.animation_progress <= 0 {return}
     progress := dialog.animation_progress
     eased := progress * progress * (3 - 2 * progress)
+    scale := 0.9 + 0.1 * eased
 
     if clay.UI(clay.ID("AboutOverlay"))(
     {
@@ -47,17 +48,17 @@ AboutDialog :: proc(dialog: ^AboutDialogState, delta_seconds: f32) {
         {
             layout = clay.LayoutConfig {
                 sizing = clay.Sizing {
-                    width = clay.SizingFixed(320),
-                    height = clay.SizingFixed(200 * eased),
+                    width = clay.SizingFixed(320 * scale),
+                    height = clay.SizingFixed(200 * scale),
                 },
                 layoutDirection = .TopToBottom,
                 childAlignment = clay.ChildAlignment{x = .Center},
-                padding = clay.PaddingAll(24),
-                childGap = 16,
+                padding = clay.PaddingAll(u16(24 * scale)),
+                childGap = u16(16 * scale),
             },
             clip = clay.ClipElementConfig{horizontal = true, vertical = true},
-            backgroundColor = theme.Light.surface,
-            cornerRadius = clay.CornerRadiusAll(12),
+            backgroundColor = dialog_color_opacity(theme.Light.surface, eased),
+            cornerRadius = clay.CornerRadiusAll(12 * scale),
             border = clay.BorderElementConfig {
                 width = clay.BorderWidth {
                     left = 1,
@@ -65,31 +66,37 @@ AboutDialog :: proc(dialog: ^AboutDialogState, delta_seconds: f32) {
                     top = 1,
                     bottom = 1,
                 },
-                color = theme.Light.border,
+                color = dialog_color_opacity(theme.Light.border, eased),
             },
         },
         ) {
             clay.Text(
                 "Dope Notes",
                 clay.TextElementConfig {
-                    fontSize = 22,
-                    textColor = theme.Light.text,
+                    fontSize = u16(22 * scale),
+                    textColor = dialog_color_opacity(theme.Light.text, eased),
                     wrapMode = .None,
                 },
             )
             clay.Text(
                 fmt.tprintf("Version %s", config.DISPLAY_VERSION),
                 clay.TextElementConfig {
-                    fontSize = 14,
-                    textColor = theme.Light.text_secondary,
+                    fontSize = u16(14 * scale),
+                    textColor = dialog_color_opacity(
+                        theme.Light.text_secondary,
+                        eased,
+                    ),
                     wrapMode = .None,
                 },
             )
             clay.Text(
                 "A quiet place for your notes.",
                 clay.TextElementConfig {
-                    fontSize = 13,
-                    textColor = theme.Light.text_secondary,
+                    fontSize = u16(13 * scale),
+                    textColor = dialog_color_opacity(
+                        theme.Light.text_secondary,
+                        eased,
+                    ),
                 },
             )
             close_id := clay.ID("AboutClose")
@@ -98,23 +105,29 @@ AboutDialog :: proc(dialog: ^AboutDialogState, delta_seconds: f32) {
             {
                 layout = clay.LayoutConfig {
                     sizing = clay.Sizing {
-                        width = clay.SizingFixed(88),
-                        height = clay.SizingFixed(32),
+                        width = clay.SizingFixed(88 * scale),
+                        height = clay.SizingFixed(32 * scale),
                     },
                     childAlignment = clay.ChildAlignment {
                         x = .Center,
                         y = .Center,
                     },
                 },
-                backgroundColor = hovered ? theme.Light.accent_hover : theme.Light.accent,
-                cornerRadius = clay.CornerRadiusAll(6),
+                backgroundColor = dialog_color_opacity(
+                    hovered ? theme.Light.accent_hover : theme.Light.accent,
+                    eased,
+                ),
+                cornerRadius = clay.CornerRadiusAll(6 * scale),
             },
             ) {
                 clay.Text(
                     "Close",
                     clay.TextElementConfig {
-                        fontSize = 13,
-                        textColor = theme.Light.on_accent,
+                        fontSize = u16(13 * scale),
+                        textColor = dialog_color_opacity(
+                            theme.Light.on_accent,
+                            eased,
+                        ),
                     },
                 )
                 if hovered &&
@@ -130,4 +143,10 @@ AboutDialog :: proc(dialog: ^AboutDialogState, delta_seconds: f32) {
         }
     }
     dialog.just_opened = false
+}
+
+dialog_color_opacity :: proc(color: clay.Color, opacity: f32) -> clay.Color {
+    result := color
+    result.a *= opacity
+    return result
 }
