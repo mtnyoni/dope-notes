@@ -8,11 +8,14 @@ import clay "shared:clay"
 TOAST_DURATION_SECONDS :: 3.0
 TOAST_WIDTH :: 240
 TOAST_FONT_SIZE :: 11
+TOAST_ANIMATION_SECONDS :: 0.2
+TOAST_SLIDE_DISTANCE :: 120
 
 ToastState :: struct {
     message:           string,
     remaining_seconds: f32,
     icon: assets.Icon,
+    animation_progress: f32,
 }
 
 show_toast :: proc(toast: ^ToastState, message: string, icon: assets.Icon = .CircleCheck) {
@@ -29,12 +32,19 @@ destroy_toast :: proc(toast: ^ToastState) {
 }
 
 Toast :: proc(toast: ^ToastState, delta_seconds: f32, ui_assets: ^assets.Manager) {
-    if toast == nil || toast.remaining_seconds <= 0 {return}
+    if toast == nil || toast.message == "" {return}
     toast.remaining_seconds = max(0, toast.remaining_seconds - delta_seconds)
-    if toast.remaining_seconds <= 0 {
+    direction: f32 = toast.remaining_seconds > 0 ? 1 : -1
+    toast.animation_progress = clamp(
+        toast.animation_progress + direction * delta_seconds / TOAST_ANIMATION_SECONDS,
+        0, 1,
+    )
+    if toast.remaining_seconds <= 0 && toast.animation_progress <= 0 {
         destroy_toast(toast)
         return
     }
+    progress := toast.animation_progress
+    eased := progress * progress * (3 - 2 * progress)
     if clay.UI(clay.ID("Toast"))(
     {
         layout = clay.LayoutConfig {
@@ -58,7 +68,7 @@ Toast :: proc(toast: ^ToastState, delta_seconds: f32, ui_assets: ^assets.Manager
                 element = .RightBottom,
                 parent = .RightBottom,
             },
-            offset = clay.Vector2{-20, -20},
+            offset = clay.Vector2{-20, -20 + TOAST_SLIDE_DISTANCE * (1 - eased)},
             pointerCaptureMode = .Passthrough,
             zIndex = 110,
         },
