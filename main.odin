@@ -63,6 +63,7 @@ App :: struct {
     toast: ui.ToastState,
     about_dialog: ui.AboutDialogState,
     settings_open:          bool,
+    titlebar_clickable:     bool,
     cursors:                Cursors,
     clay_memory:            [^]u8,
     face:                   Face,
@@ -122,7 +123,7 @@ app_init :: proc(app: ^App) -> bool {
 }
 
 app_init_platform :: proc(app: ^App) -> bool {
-    app.window = create_app_window(&app.settings_open)
+    app.window = create_app_window(&app.titlebar_clickable)
     if app.window == nil {return false}
     app.stage = .Window
 
@@ -219,6 +220,8 @@ app_init_workers :: proc(app: ^App) -> bool {
 }
 
 app_frame :: proc(app: ^App) {
+    app.titlebar_clickable = app.settings_open || app.about_dialog.open ||
+        app.about_dialog.animation_progress > 0
     manual_sync := app.menu_sync_pending
     delta_seconds, sync_requested := app_begin_frame(app)
 
@@ -228,6 +231,8 @@ app_frame :: proc(app: ^App) {
 
     app_sync_and_notes(app, sync_requested || events.sync_requested, manual_sync || events.sync_requested)
     app_draw(app, events, delta_seconds)
+    app.titlebar_clickable = app.settings_open || app.about_dialog.open ||
+        app.about_dialog.animation_progress > 0
 }
 
 app_begin_frame :: proc(
@@ -290,7 +295,7 @@ app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
         &app.cursors,
         frame.mouse_x,
         frame.mouse_y,
-        &app.settings_open,
+        &app.titlebar_clickable,
     )
 
     update_selected_note(

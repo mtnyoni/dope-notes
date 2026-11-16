@@ -82,7 +82,7 @@ UILayout :: proc(
 		}
         Toast(settings_state.toast, delta_seconds, ui_assets)
         if settings_state.about != nil {
-            AboutDialog(settings_state.about, delta_seconds)
+            AboutDialog(settings_state.about, delta_seconds, maximized)
         }
 	}
 }

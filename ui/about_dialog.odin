@@ -11,7 +11,11 @@ AboutDialogState :: struct {
     animation_progress: f32,
 }
 
-AboutDialog :: proc(dialog: ^AboutDialogState, delta_seconds: f32) {
+AboutDialog :: proc(
+    dialog: ^AboutDialogState,
+    delta_seconds: f32,
+    maximized: bool,
+) {
     dialog.animation_progress = clamp(
         dialog.animation_progress +
         (dialog.open ? 1.0 : -1.0) * delta_seconds * 6,
@@ -42,6 +46,7 @@ AboutDialog :: proc(dialog: ^AboutDialogState, delta_seconds: f32) {
             zIndex = 100,
         },
         backgroundColor = clay.Color{0, 0, 0, 70 * eased},
+        cornerRadius = clay.CornerRadiusAll(maximized ? 0 : 12),
     },
     ) {
         if clay.UI(clay.ID("AboutDialog"))(
