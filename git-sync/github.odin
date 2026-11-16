@@ -107,6 +107,7 @@ update_github_sync :: proc(
     loaded_doc: ^string,
     last_saved: ^string,
     face: ^font.Font,
+    toast: ^ui.ToastState,
 ) {
     sdl.LockMutex(worker.mutex)
     done := worker.done
@@ -117,16 +118,15 @@ update_github_sync :: proc(
     if sync_thread^ != nil && done {
         sdl.WaitThread(sync_thread^, nil)
         sync_thread^ = nil
+        if was_manual {
+            if success || result == .AlreadySynced {ui.show_toast(toast, "Synced")}
+            else if result == .Offline {ui.show_toast(toast, "No connection to GitHub. Try again later.", .CircleExclamation)}
+            else {ui.show_toast(toast, "GitHub sync failed", .CircleExclamation)}
+        }
         if success {
             reload_synced_notes(
                 worker.notes_dir, app_state, documents, editor_state,
                 empty_editor, loaded_doc, last_saved, face,
-            )
-        } else if result == .Offline && was_manual {
-            _ = sdl.ShowSimpleMessageBox(
-                {.WARNING}, "Sync unavailable",
-                "Cannot reach GitHub. Check your network connection and try again.",
-                window,
             )
         } else if result != .AlreadySynced && result != .Offline {
             fmt.eprintln("GitHub sync failed; see details above")

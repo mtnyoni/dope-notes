@@ -60,6 +60,7 @@ App :: struct {
     stage:                  Init_Stage,
     running:                bool,
     window:                 ^sdl.Window,
+    toast: ui.ToastState,
     about_dialog: ui.AboutDialogState,
     settings_open:          bool,
     cursors:                Cursors,
@@ -266,6 +267,7 @@ app_sync_and_notes :: proc(app: ^App, sync_requested: bool, manual: bool) {
         &app.loaded_doc,
         &app.last_saved,
         app.face,
+        &app.toast,
     )
 
     state.update_note_content(
@@ -325,6 +327,7 @@ app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
             sync_pending = &app.menu_sync_pending,
             animation_progress = &app.settings_menu_progress,
             about = &app.about_dialog,
+            toast = &app.toast,
         },
     )
 
@@ -333,6 +336,7 @@ app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
 }
 
 app_destroy :: proc(app: ^App) {
+    ui.destroy_toast(&app.toast)
     if app.stage >= .Sync_Worker {
         sync_worker_stop(&app.sync_worker, app.github_sync_thread)
     }

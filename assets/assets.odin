@@ -26,6 +26,8 @@ Icon :: enum {
 	X,
 	Minus,
 	Settings,
+	CircleCheck,
+	CircleExclamation,
 }
 
 ICON_PATHS :: [Icon]cstring {
@@ -48,6 +50,8 @@ ICON_PATHS :: [Icon]cstring {
 	.X                = "assets/icons/x.png",
 	.Minus            = "assets/icons/minus.png",
 	.Settings         = "assets/icons/settings.png",
+	.CircleCheck = "assets/icons/circle-check.png",
+	.CircleExclamation = "assets/icons/circle-exclamation-point.png",
 }
 
 Manager :: struct {
