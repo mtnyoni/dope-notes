@@ -382,7 +382,8 @@ RPM dependencies install the HTTPS and keyring runtime libraries automatically.
 Click **Settings → Sync** (or **Ctrl+Shift+G**). On first use, the app opens a
 GitHub sign-in dialog. Click **Sign in with GitHub**, enter the displayed device
 code in your browser, and authorize the app. Then enter a private repository as
-`owner/name` and a branch, normally `main`. Connect an existing notes repo or
+`owner/name` and a branch. Development builds default to `dev`; production
+builds default to `main`. Existing `main`/`dev` settings follow the build mode. Connect an existing notes repo or
 click **Create private repository** to create a new empty repo under your account.
 Use a separate repository for notes, not the app source repository.
 

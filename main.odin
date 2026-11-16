@@ -269,11 +269,11 @@ app_begin_frame :: proc(
 }
 
 app_sync_and_notes :: proc(app: ^App, sync_requested: bool, manual: bool) {
-    git_sync.update_github_setup(&app.auth_worker, &app.github_setup, &app.menu_sync_pending)
+    git_sync.update_github_setup(&app.auth_worker, &app.github_setup, &app.menu_sync_pending, app.github_sync_thread == nil)
     git_sync.update_github_sync(
         &app.sync_worker,
         &app.github_sync_thread,
-        sync_requested,
+        sync_requested && !app.github_setup.reset_requested,
         manual,
         &app.app_state,
         &app.documents,

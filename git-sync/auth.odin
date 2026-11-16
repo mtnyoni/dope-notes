@@ -6,6 +6,7 @@ import "base:runtime"
 import "core:c"
 import "core:encoding/json"
 import "core:fmt"
+import "core:os"
 import "core:strings"
 import sdl "vendor:sdl3"
 
@@ -36,7 +37,7 @@ load_token :: proc() -> (string, string) {
     return strings.clone(string(cstring(&token[0])), context.temp_allocator), ""
 }
 
-AuthJob :: enum {None, Begin, Poll, Connect, Create}
+AuthJob :: enum {None, Begin, Poll, Connect, Create, Reset}
 AuthWorker :: struct {
     mutex: ^sdl.Mutex,
     thread: ^sdl.Thread,
@@ -84,6 +85,19 @@ auth_thread :: proc "c" (data: rawptr) -> c.int {
     error := ""
     success, pending := false, false
     #partial switch worker.job {
+    case .Reset:
+        native_error: [1024]u8
+        if dn_token_delete(cstr(config.APPLICATION_ID), &native_error[0], len(native_error)) != 0 {
+            error = string(cstring(&native_error[0]))
+        } else {
+            directory := config.github_settings_directory()
+            if directory == "" {error = "Cannot find repository settings"}
+            else {
+                remove_error := os.remove(fmt.tprintf("%s/github.json", directory))
+                success = remove_error == nil || remove_error == .Not_Exist
+                if !success {error = fmt.tprintf("Cannot remove repository settings: %v", remove_error)}
+            }
+        }
     case .Begin:
         body, _ := json.marshal(struct {client_id: string, scope: string}{string(cstring(&worker.client_id[0])), "repo"}, allocator = context.temp_allocator)
         response, status, http_error := http_json("POST", "https://github.com/login/device/code", "", string(body))
@@ -166,7 +180,7 @@ start_auth_job :: proc(worker: ^AuthWorker, job: AuthJob) -> bool {
     return true
 }
 
-update_github_setup :: proc(worker: ^AuthWorker, setup: ^ui.GithubSetupState, sync_pending: ^bool) {
+update_github_setup :: proc(worker: ^AuthWorker, setup: ^ui.GithubSetupState, sync_pending: ^bool, allow_reset := true) {
     if worker.thread != nil {
         sdl.LockMutex(worker.mutex)
         done := worker.done
@@ -178,6 +192,11 @@ update_github_setup :: proc(worker: ^AuthWorker, setup: ^ui.GithubSetupState, sy
                 worker.next_poll = sdl.GetTicksNS() + u64(worker.interval) * 1_000_000_000
             } else if worker.success {
                 #partial switch worker.job {
+                case .Reset:
+                    setup^ = ui.GithubSetupState{open = true, just_opened = true}
+                    sync_pending^ = false
+                    worker.device_code = {}
+                    worker.user_code = {}
                 case .Begin:
                     copy_text(setup.user_code[:], string(cstring(&worker.user_code[0])))
                     setup.phase = .Authorizing
@@ -190,12 +209,26 @@ update_github_setup :: proc(worker: ^AuthWorker, setup: ^ui.GithubSetupState, sy
                     sync_pending^ = true
                 }
             } else {
+                if worker.job == .Reset {setup.reset_requested = false; setup.open = true}
                 copy_text(setup.error[:], string(cstring(&worker.error[0])))
                 setup.phase = worker.job == .Connect || worker.job == .Create ? .Repository : .Welcome
             }
         }
     }
     if worker.thread != nil {return}
+    if setup.reset_requested {
+        if !allow_reset {return}
+        setup.open = true
+        setup.just_opened = true
+        setup.phase = .Busy
+        setup.request = .None
+        if !start_auth_job(worker, .Reset) {
+            setup.reset_requested = false
+            setup.phase = .Welcome
+            copy_text(setup.error[:], "Could not reset GitHub connection")
+        }
+        return
+    }
     if !setup.open {return}
     if setup.request != .None {
         request := setup.request

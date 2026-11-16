@@ -23,6 +23,7 @@ foreign native {
     dn_native_init :: proc() -> c.int ---
     dn_native_shutdown :: proc() ---
     dn_token_store :: proc(app, token: cstring, error: [^]u8, cap: c.size_t) -> c.int ---
+    dn_token_delete :: proc(app: cstring, error: [^]u8, cap: c.size_t) -> c.int ---
     dn_token_load :: proc(app: cstring, token: [^]u8, cap: c.size_t, error: [^]u8, error_cap: c.size_t) -> c.int ---
     dn_http :: proc(method, url, token, body: cstring, out: [^]u8, cap: c.size_t, status: ^c.int, error: [^]u8, error_cap: c.size_t) -> c.int ---
     dn_sync :: proc(path, url, branch, token, name, email: cstring, error: [^]u8, cap: c.size_t) -> c.int ---

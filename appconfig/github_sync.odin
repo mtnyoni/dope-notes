@@ -5,6 +5,12 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
+when DEVELOPMENT {
+    GITHUB_SYNC_BRANCH :: "dev"
+} else {
+    GITHUB_SYNC_BRANCH :: "main"
+}
+
 GITHUB_CLIENT_ID :: #config(DOPE_NOTES_GITHUB_CLIENT_ID, "")
 
 GithubSettings :: struct {
@@ -39,6 +45,9 @@ load_github_settings :: proc() -> (GithubSettings, bool) {
     if err != nil {return {}, false}
     saved: GithubSettings
     if json.unmarshal(data, &saved, allocator = context.temp_allocator) != nil {return {}, false}
+    if saved.branch == "main" || saved.branch == "dev" || saved.branch == "" {
+        saved.branch = GITHUB_SYNC_BRANCH
+    }
     return saved, valid_github_repository(saved.repository) && saved.branch != ""
 }
 

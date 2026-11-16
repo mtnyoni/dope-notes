@@ -57,6 +57,14 @@ int main(void) {
     require(f != NULL, "local note retained", error); fgets(actual, sizeof(actual), f); fclose(f);
     require(!strcmp(actual, "Preserve my local edits\n"), "divergence preserves local content", error);
     require(sync_notes(local, "/tmp/another-repo.git", error) == -1, "remote mismatch rejected", error);
+    require(dn_sync(reader, remote, "dev", "unused", "Test", "test@example.invalid", error, sizeof(error)) == 0,
+        "rename existing local branch to dev and sync", error);
+    git_repository *verify = NULL; git_oid main_id, dev_id;
+    require(git_repository_open(&verify, remote) == 0, "open remote branches", "");
+    require(git_reference_name_to_id(&main_id, verify, "refs/heads/main") == 0, "production branch retained", "");
+    require(git_reference_name_to_id(&dev_id, verify, "refs/heads/dev") == 0, "development branch created", "");
+    require(git_oid_equal(&main_id, &dev_id), "branch migration preserves history", "");
+    git_repository_free(verify);
     dn_native_shutdown();
     printf("Native sync regression checks passed (%s)\n", directory);
     return 0;

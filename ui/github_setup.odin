@@ -1,5 +1,6 @@
 package ui
 
+import config "../appconfig"
 import theme "../theme"
 import "core:c"
 import "core:strings"
@@ -9,6 +10,7 @@ import sdl "vendor:sdl3"
 GithubSetupPhase :: enum {Welcome, Authorizing, Repository, Busy}
 GithubSetupRequest :: enum {None, SignIn, Connect, Create}
 GithubSetupState :: struct {
+    reset_requested: bool,
     open: bool,
     just_opened: bool,
     phase: GithubSetupPhase,
@@ -17,6 +19,7 @@ GithubSetupState :: struct {
     repository_length: int,
     branch: [80]u8,
     branch_length: int,
+    branch_initialized: bool,
     selected_field: int,
     user_code: [32]u8,
     error: [1024]u8,
@@ -87,10 +90,11 @@ GithubSetupField :: proc(name, label, value: string, selected: bool) -> bool {
 
 GithubSetupDialog :: proc(setup: ^GithubSetupState, maximized: bool) {
     if setup == nil || !setup.open {return}
-    if setup.branch_length == 0 {
-        default_branch: string = "main"
+    if !setup.branch_initialized {
+        default_branch: string = config.GITHUB_SYNC_BRANCH
         copy(setup.branch[:], transmute([]u8)default_branch)
-        setup.branch_length = 4
+        setup.branch_length = len(default_branch)
+        setup.branch_initialized = true
     }
     if clay.UI(clay.ID("GithubSetupOverlay"))({
         layout = clay.LayoutConfig {

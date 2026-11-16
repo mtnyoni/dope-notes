@@ -278,21 +278,27 @@ SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMe
 	animation_progress :=
 		menu_state.animation_progress != nil ? menu_state.animation_progress^ : 1.0
 	animation_easing := animation_progress * animation_progress * (3 - 2 * animation_progress)
+	dropdown_width: f32 = 260
+	button_bounds := clay.GetElementData(clay.ID("Settings")).boundingBox
+	right_inset := f32(TITLEBAR_HORIZONTAL_PADDING)
+	if window != nil && .MAXIMIZED not_in sdl.GetWindowFlags(window) {
+		right_inset += WINDOW_OUTER_PADDING
+	}
 
 	if clay.UI(clay.ID("SettingsMenu"))(
 	{
 		layout = clay.LayoutConfig {
 			sizing = clay.Sizing {
-				width = clay.SizingFixed(28 + 84 * animation_easing),
-				height = clay.SizingFixed(64 * animation_easing),
+				width = clay.SizingFixed(28 + (dropdown_width - 28) * animation_easing),
+				height = clay.SizingFixed(92 * animation_easing),
 			},
 			layoutDirection = .TopToBottom,
 			padding = clay.PaddingAll(4),
 		},
 		floating = clay.FloatingElementConfig {
-			attachTo = .ElementWithId,
-			parentId = clay.ID("Settings").id,
-			attachment = clay.FloatingAttachPoints{element = .LeftTop, parent = .LeftBottom},
+			attachTo = .Root,
+			attachment = clay.FloatingAttachPoints{element = .RightTop, parent = .RightTop},
+			offset = clay.Vector2{-right_inset, button_bounds.y + button_bounds.height},
 			zIndex = 10,
 		},
 		clip = clay.ClipElementConfig{horizontal = true, vertical = true},
@@ -315,6 +321,17 @@ SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMe
 			},
 			on_click_data = &sync_state,
 		})
+
+        DropdownMenuItem({
+            name = "SettingsResetGithub",
+            label = "Reset GitHub connection",
+            on_click = proc(data: rawptr) {
+                state := cast(^SettingsDropdownMenuState)data
+                if state.open != nil {state.open^ = false}
+                if state.github_setup != nil {state.github_setup.reset_requested = true}
+            },
+            on_click_data = &sync_state,
+        })
 
 		DropdownMenuItem({
 			name = "SettingsAbout",

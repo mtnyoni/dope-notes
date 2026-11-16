@@ -207,9 +207,21 @@ int dn_sync(const char *path, const char *url, const char *branch, const char *t
     }
     r = git_repository_head(&head, repo);
     if (r == 0 && strcmp(git_reference_name(head), local_name)) {
-        message(error, cap, "The local branch does not match the configured notes branch"); goto cleanup;
+        git_reference *existing = NULL;
+        int lookup = git_reference_lookup(&existing, repo, local_name);
+        git_reference_free(existing);
+        if (lookup != GIT_ENOTFOUND) {
+            message(error, cap, "The target local branch already exists. Switch branches manually to preserve both histories.");
+            goto cleanup;
+        }
+        /* Rename without checking out files: preserve all edits and commits. */
+        git_reference *renamed = NULL;
+        CHECK(git_branch_move(&renamed, head, branch, 0), "Select notes branch");
+        git_reference_free(head); head = renamed;
+        r = 0;
     }
     if (r < 0 && r != GIT_EUNBORNBRANCH && r != GIT_ENOTFOUND) {git_failure(error, cap, "Read local branch"); goto cleanup;}
+    if (!head) CHECK(git_repository_set_head(repo, local_name), "Set initial notes branch");
     if (git_repository_state(repo) != GIT_REPOSITORY_STATE_NONE) {
         message(error, cap, "Finish the pending Git operation before syncing"); goto cleanup;
     }
@@ -286,4 +298,17 @@ cleanup:
     git_remote_free(remote); git_repository_free(repo);
     return result;
 #undef CHECK
+}
+
+int dn_token_delete(const char *app, char *error, size_t cap) {
+#ifdef _WIN32
+    if (CredDeleteA(app, CRED_TYPE_GENERIC, 0) || GetLastError() == ERROR_NOT_FOUND) return 0;
+    message(error, cap, "Windows Credential Manager could not remove the session");
+#else
+    GError *e = NULL;
+    secret_password_clear_sync(&schema, NULL, &e, "application", app, NULL);
+    if (!e) return 0;
+    message(error, cap, e->message); g_error_free(e);
+#endif
+    return -1;
 }
