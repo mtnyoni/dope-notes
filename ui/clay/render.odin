@@ -79,6 +79,10 @@ render_clay :: proc(
 	commands: ^clay.ClayArray(clay.RenderCommand),
 	scale_x, scale_y: f32,
 ) {
+	original_blend: sdl.BlendMode
+	assert(sdl.GetRenderDrawBlendMode(renderer, &original_blend))
+	assert(sdl.SetRenderDrawBlendMode(renderer, sdl.BLENDMODE_BLEND))
+	defer assert(sdl.SetRenderDrawBlendMode(renderer, original_blend))
 	// Clip rectangles are relative to the current SDL viewport, in pixels.
 	viewport: sdl.Rect
 	assert(sdl.GetRenderViewport(renderer, &viewport))

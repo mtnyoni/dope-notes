@@ -60,6 +60,7 @@ App :: struct {
     stage:                  Init_Stage,
     running:                bool,
     window:                 ^sdl.Window,
+    about_dialog: ui.AboutDialogState,
     settings_open:          bool,
     cursors:                Cursors,
     clay_memory:            [^]u8,
@@ -220,8 +221,9 @@ app_frame :: proc(app: ^App) {
     manual_sync := app.menu_sync_pending
     delta_seconds, sync_requested := app_begin_frame(app)
 
-    events := poll_frame_events(app.editor_state, &app.image_media)
+    events := poll_frame_events(app.editor_state, &app.image_media, app.about_dialog.open || app.about_dialog.animation_progress > 0)
     if events.quit {app.running = false}
+    if events.dismiss_dialog {app.about_dialog.open = false}
 
     app_sync_and_notes(app, sync_requested || events.sync_requested, manual_sync || events.sync_requested)
     app_draw(app, events, delta_seconds)
@@ -322,6 +324,7 @@ app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
             open = &app.settings_open,
             sync_pending = &app.menu_sync_pending,
             animation_progress = &app.settings_menu_progress,
+            about = &app.about_dialog,
         },
     )
 

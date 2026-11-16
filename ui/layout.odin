@@ -80,5 +80,8 @@ UILayout :: proc(
 				}
 			}
 		}
+        if settings_state.about != nil {
+            AboutDialog(settings_state.about, delta_seconds)
+        }
 	}
 }

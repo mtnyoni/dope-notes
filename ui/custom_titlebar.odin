@@ -269,6 +269,7 @@ SettingsDropdownMenuState :: struct {
 	open:               ^bool,
 	sync_pending:       ^bool,
 	animation_progress: ^f32,
+	about: ^AboutDialogState,
 }
 
 SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMenuState) {
@@ -317,13 +318,14 @@ SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMe
 			name = "SettingsAbout",
 			label = "About",
 			on_click = proc(data: rawptr) {
-				about := cast(^SettingsAboutData)data
-				if about.open != nil do about.open^ = false
-				if about.window == nil do return
-				message := fmt.tprintf("Dope Notes\nVersion %s", config.DISPLAY_VERSION)
-				_ = sdl.ShowSimpleMessageBox({.INFORMATION}, "About Dope Notes", strings.clone_to_cstring(message, context.temp_allocator), about.window)
+				state := cast(^SettingsDropdownMenuState)data
+                if state.open != nil do state.open^ = false
+                if state.about != nil {
+                    state.about.open = true
+                    state.about.just_opened = true
+                }
 			},
-			on_click_data = &SettingsAboutData{window = window, open = menu_state.open},
+			on_click_data = &sync_state,
 		})
 	}
 
@@ -334,11 +336,6 @@ SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMe
 	   !clay.PointerOver(clay.ID("Settings")) {
 		menu_state.open^ = false
 	}
-}
-
-SettingsAboutData :: struct {
-	window: ^sdl.Window,
-	open:   ^bool,
 }
 
 DropdownMenuItemConfig :: struct {

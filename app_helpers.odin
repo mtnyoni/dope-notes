@@ -75,11 +75,13 @@ FrameEvents :: struct {
     left_pressed:   bool,
     quit:           bool,
     sync_requested: bool,
+    dismiss_dialog: bool,
 }
 
 poll_frame_events :: proc(
     editor: ^ui.EditorState,
     image_media: ^media.Manager,
+    modal_open := false,
 ) -> FrameEvents {
     result: FrameEvents
     editor.media = image_media
@@ -92,7 +94,13 @@ poll_frame_events :: proc(
             result.sync_requested = true
             continue
         }
-        ui.editor_handle_event(editor, &event)
+        if modal_open {
+            if event.type == .KEY_DOWN && event.key.key == sdl.K_ESCAPE {
+                result.dismiss_dialog = true
+            }
+        } else {
+            ui.editor_handle_event(editor, &event)
+        }
         #partial switch event.type {
         case .MOUSE_WHEEL:
             direction: f32 = event.wheel.direction == .FLIPPED ? -1 : 1
