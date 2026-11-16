@@ -272,7 +272,6 @@ SettingsDropdownMenuState :: struct {
 }
 
 SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMenuState) {
-	menu_items := [2]string{"Sync", "About"}
 	animation_progress :=
 		menu_state.animation_progress != nil ? menu_state.animation_progress^ : 1.0
 	animation_easing := animation_progress * animation_progress * (3 - 2 * animation_progress)
@@ -287,13 +286,13 @@ SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMe
 			layoutDirection = .TopToBottom,
 			padding = clay.PaddingAll(4),
 		},
-		floating = {
+		floating = clay.FloatingElementConfig {
 			attachTo = .ElementWithId,
 			parentId = clay.ID("Settings").id,
-			attachment = {element = .LeftTop, parent = .LeftBottom},
+			attachment = clay.FloatingAttachPoints{element = .LeftTop, parent = .LeftBottom},
 			zIndex = 10,
 		},
-		clip = {horizontal = true, vertical = true},
+		clip = clay.ClipElementConfig{horizontal = true, vertical = true},
 		backgroundColor = theme.White,
 		cornerRadius = clay.CornerRadiusAll(6),
 		border = clay.BorderElementConfig {
@@ -302,46 +301,30 @@ SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMe
 		},
 	},
 	) {
-		for label, index in menu_items {
-			hovered := false
-			if clay.UI(clay.ID("SettingsMenuItem", u32(index)))(
-			{
-				layout = clay.LayoutConfig {
-					sizing = clay.Sizing{width = clay.SizingGrow(), height = clay.SizingFixed(28)},
-					childAlignment = clay.ChildAlignment{y = .Center},
-					padding = clay.Padding{left = 8},
-				},
-				backgroundColor = hovered ? theme.Gray_100 : theme.White,
-				cornerRadius = clay.CornerRadiusAll(4),
+		sync_state := menu_state
+		DropdownMenuItem({
+			name = "SettingsSync",
+			label = "Sync",
+			on_click = proc(data: rawptr) {
+				state := cast(^SettingsDropdownMenuState)data
+				if state.open != nil do state.open^ = false
+				if state.sync_pending != nil do state.sync_pending^ = true
 			},
-			) {
-				hovered = clay.Hovered()
-				clay.Text(
-					label,
-					clay.TextElementConfig {
-						fontSize = 12,
-						textColor = theme.Light.text,
-						wrapMode = .None,
-					},
-				)
-			}
+			on_click_data = &sync_state,
+		})
 
-			if hovered && clay.GetPointerState().state == .PressedThisFrame {
-				menu_state.open^ = false
-
-				if index == 0 {
-					if menu_state.sync_pending != nil do menu_state.sync_pending^ = true
-				} else if window != nil {
-					message := fmt.tprintf("Dope Notes\nVersion %s", config.DISPLAY_VERSION)
-					_ = sdl.ShowSimpleMessageBox(
-						{.INFORMATION},
-						"About Dope Notes",
-						strings.clone_to_cstring(message, context.temp_allocator),
-						window,
-					)
-				}
-			}
-		}
+		DropdownMenuItem({
+			name = "SettingsAbout",
+			label = "About",
+			on_click = proc(data: rawptr) {
+				about := cast(^SettingsAboutData)data
+				if about.open != nil do about.open^ = false
+				if about.window == nil do return
+				message := fmt.tprintf("Dope Notes\nVersion %s", config.DISPLAY_VERSION)
+				_ = sdl.ShowSimpleMessageBox({.INFORMATION}, "About Dope Notes", strings.clone_to_cstring(message, context.temp_allocator), about.window)
+			},
+			on_click_data = &SettingsAboutData{window = window, open = menu_state.open},
+		})
 	}
 
 	if menu_state.open != nil &&
@@ -350,5 +333,41 @@ SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMe
 	   !clay.PointerOver(clay.ID("SettingsMenu")) &&
 	   !clay.PointerOver(clay.ID("Settings")) {
 		menu_state.open^ = false
+	}
+}
+
+SettingsAboutData :: struct {
+	window: ^sdl.Window,
+	open:   ^bool,
+}
+
+DropdownMenuItemConfig :: struct {
+	name:          string,
+	label:         string,
+	on_click:      proc(data: rawptr),
+	on_click_data: rawptr,
+}
+
+DropdownMenuItem :: proc(item: DropdownMenuItemConfig) {
+	id := clay.ID(item.name)
+	hovered := clay.PointerOver(id)
+	if clay.UI(id)(
+	{
+		layout = clay.LayoutConfig {
+			sizing = clay.Sizing{width = clay.SizingGrow(), height = clay.SizingFixed(28)},
+			childAlignment = clay.ChildAlignment{y = .Center},
+			padding = clay.Padding{left = 8},
+		},
+		backgroundColor = hovered ? theme.Gray_100 : theme.White,
+		cornerRadius = clay.CornerRadiusAll(4),
+	},
+	) {
+		clay.Text(
+			item.label,
+			clay.TextElementConfig{fontSize = 12, textColor = theme.Light.text, wrapMode = .None},
+		)
+		if hovered && clay.GetPointerState().state == .PressedThisFrame && item.on_click != nil {
+			item.on_click(item.on_click_data)
+		}
 	}
 }

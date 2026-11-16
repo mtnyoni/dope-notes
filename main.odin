@@ -1,6 +1,7 @@
 package main
 
 import config "./appconfig"
+import git_sync "./git-sync"
 import media "./media"
 import state "./state"
 import assets "assets"
@@ -8,7 +9,6 @@ import buffer "buffer"
 import "core:c"
 import "core:fmt"
 import "core:mem"
-import "core:os"
 import "core:strings"
 import font "font"
 import markdown "markdown"
@@ -17,396 +17,467 @@ import theme "theme"
 import ui "ui"
 import clay_ui "ui/clay"
 import sdl "vendor:sdl3"
-import img "vendor:sdl3/image"
 
 DEFAULT_WIN_W :: 1320
 DEFAULT_WIN_H :: 640
 
+SAVE_INTERVAL_MS :: 1000
+AUTO_SYNC_INTERVAL_NS :: 60 * 1_000_000_000
+NO_VSYNC_FRAME_DELAY_MS :: 16
+SCROLL_SPEED :: 7.2
+MIN_FRAME_DELTA :: 0.001
+MAX_FRAME_DELTA :: 0.1
+
+
+Face :: ^font.Font
+Cursors :: WindowCursors
+App_State :: state.AppState
+Doc_Id :: string
+Notes_Dir :: string
+Frame_Events :: FrameEvents
+Ui_Assets :: assets.Manager
+
+
+Init_Stage :: enum {
+    None,
+    Window,
+    Cursors,
+    Clay,
+    Font,
+    Renderer,
+    Media,
+    Assets,
+    Clay_Renderer,
+    Notes_Dir,
+    App_State,
+    Editor,
+    Ticker,
+    Text_Input,
+    Sync_Worker,
+}
+
+App :: struct {
+    stage:                  Init_Stage,
+    running:                bool,
+    window:                 ^sdl.Window,
+    settings_open:          bool,
+    cursors:                Cursors,
+    clay_memory:            [^]u8,
+    face:                   Face,
+    renderer:               ^sdl.Renderer,
+    image_media:            media.Manager,
+    ui_assets:              Ui_Assets,
+    clay_renderer:          clay_ui.Clay_Renderer,
+    notes_dir:              Notes_Dir,
+    app_state:              App_State,
+    documents:              ui.EditorDocuments,
+    empty_editor:           ui.EditorState,
+    editor_state:           ^ui.EditorState,
+    loaded_doc:             Doc_Id,
+    last_saved:             string,
+    ticker:                 Save_Ticker,
+    ticker_thread:          ^sdl.Thread,
+    sync_worker:            git_sync.GithubSyncWorker,
+    github_sync_thread:     ^sdl.Thread,
+    vsync_enabled:          bool,
+    previous_frame:         u64,
+    next_auto_sync:         u64,
+    settings_menu_progress: f32,
+    menu_sync_pending:      bool,
+}
+
+
 Save_Ticker :: struct {
-	mutex:   ^sdl.Mutex,
-	running: bool,
-	pending: bool,
+    mutex:   ^sdl.Mutex,
+    running: bool,
+    pending: bool,
+}
+
+main :: proc() {
+    track: mem.Tracking_Allocator
+    mem.tracking_allocator_init(&track, context.allocator)
+    context.allocator = mem.tracking_allocator(&track)
+    defer mem.tracking_allocator_destroy(&track)
+
+    app: App
+    defer app_destroy(&app)
+    if !app_init(&app) {return}
+
+    for app.running {
+        defer free_all(context.temp_allocator)
+        app_frame(&app)
+    }
+}
+
+app_init :: proc(app: ^App) -> bool {
+    app_init_platform(app) or_return
+    app_init_graphics(app) or_return
+    app_init_notes(app) or_return
+    app_init_editor(app)
+    app_init_workers(app) or_return
+    app.running = true
+    return true
+}
+
+app_init_platform :: proc(app: ^App) -> bool {
+    app.window = create_app_window(&app.settings_open)
+    if app.window == nil {return false}
+    app.stage = .Window
+
+    app.cursors = create_window_cursors()
+    app.stage = .Cursors
+
+    app.clay_memory = init_clay_context(app.window)
+    app.stage = .Clay
+
+    app.face = font.open(assets.resource_path("font/Roboto-Regular.ttf"))
+    if app.face == nil {
+        fmt.eprintln("Could not load Dope Notes font")
+        return false
+    }
+    app.stage = .Font
+    clay.SetMeasureTextFunction(clay_ui.measure_text, app.face)
+    return true
+}
+
+app_init_graphics :: proc(app: ^App) -> bool {
+    app.renderer = create_sdl_renderer(app.window)
+    if app.renderer == nil {return false}
+    app.stage = .Renderer
+
+    if !media.init(&app.image_media, app.renderer) {
+        fmt.eprintln("Could not initialize image loading")
+        return false
+    }
+    app.stage = .Media
+
+    assets_ok: bool
+    app.ui_assets, assets_ok = assets.load(app.renderer)
+    if !assets_ok {return false}
+    app.stage = .Assets
+
+    assert(sdl.SetRenderLogicalPresentation(app.renderer, 0, 0, .DISABLED))
+    app.clay_renderer = clay_ui.Clay_Renderer {
+        font = app.face,
+    }
+    app.stage = .Clay_Renderer
+    return true
+}
+
+app_init_notes :: proc(app: ^App) -> bool {
+    storage_ok: bool
+    app.notes_dir, storage_ok = prepare_notes_directory()
+    if !storage_ok {return false}
+    app.stage = .Notes_Dir
+
+    notebooks, notebook_err := markdown.get_notes(app.notes_dir)
+    if notebook_err != nil {
+        fmt.eprintln("Could not load notebooks:", notebook_err)
+        return false
+    }
+
+    if err := markdown.migrate_note_folders(notebooks[:]); err != nil {
+        fmt.eprintln("Could not migrate note storage:", err)
+        markdown.free_notebooks(notebooks)
+        return false
+    }
+
+    app.app_state = state.make_app_state(notebooks, "Default")
+    app.stage = .App_State
+    return true
+}
+
+app_init_editor :: proc(app: ^App) {
+    app.empty_editor = make_empty_editor(app.face)
+    app.editor_state = open_initial_editor(app)
+    app.loaded_doc = app.app_state.current_doc
+    app.last_saved = snapshot_current_note(&app.app_state)
+    app.stage = .Editor
+}
+
+app_init_workers :: proc(app: ^App) -> bool {
+    app.ticker = save_ticker_init()
+    app.ticker_thread = save_ticker_start(&app.ticker)
+    app.stage = .Ticker
+
+    if !start_text_input(app.window) {return false}
+    app.stage = .Text_Input
+
+    app.vsync_enabled = sdl.SetRenderVSync(app.renderer, 1)
+    app.previous_frame = sdl.GetTicksNS()
+    app.next_auto_sync = sdl.GetTicksNS()
+
+    app.sync_worker = git_sync.GithubSyncWorker {
+        mutex     = sdl.CreateMutex(),
+        notes_dir = app.notes_dir,
+    }
+    assert(app.sync_worker.mutex != nil)
+    app.stage = .Sync_Worker
+    return true
+}
+
+app_frame :: proc(app: ^App) {
+    delta_seconds, sync_requested := app_begin_frame(app)
+
+    events := poll_frame_events(app.editor_state, &app.image_media)
+    if events.quit {app.running = false}
+
+    app_sync_and_notes(app, sync_requested || events.sync_requested)
+    app_draw(app, events, delta_seconds)
+}
+
+app_begin_frame :: proc(
+    app: ^App,
+) -> (
+    delta_seconds: f32,
+    sync_requested: bool,
+) {
+    sync_requested = app.menu_sync_pending
+    app.menu_sync_pending = false
+
+    if save_ticker_take_pending(&app.ticker) {app_save_focused_note(app)}
+
+    now := sdl.GetTicksNS()
+    if auto_sync_due(now, &app.next_auto_sync) {sync_requested = true}
+
+    delta_seconds = clamp(
+        f32(now - app.previous_frame) / 1e9,
+        MIN_FRAME_DELTA,
+        MAX_FRAME_DELTA,
+    )
+    app.previous_frame = now
+    return
+}
+
+app_sync_and_notes :: proc(app: ^App, sync_requested: bool) {
+    git_sync.update_github_sync(
+        &app.sync_worker,
+        &app.github_sync_thread,
+        sync_requested,
+        &app.app_state,
+        &app.documents,
+        &app.editor_state,
+        &app.empty_editor,
+        &app.loaded_doc,
+        &app.last_saved,
+        app.face,
+    )
+
+    state.update_note_content(
+        &app.app_state,
+        app.loaded_doc,
+        ui.editor_text(app.editor_state),
+    )
+    if app.app_state.new_note_requested {
+        app.app_state.new_note_requested = false
+        if err := state.create_note(&app.app_state); err != nil {
+            fmt.eprintln("Could not create note:", err)
+        }
+    }
+}
+
+app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
+    frame := prepare_frame(app.window, app.renderer)
+    update_window_cursor(
+        app.window,
+        &app.cursors,
+        frame.mouse_x,
+        frame.mouse_y,
+        &app.settings_open,
+    )
+
+    update_selected_note(
+        &app.app_state,
+        &app.documents,
+        &app.editor_state,
+        &app.empty_editor,
+        &app.loaded_doc,
+        &app.last_saved,
+        app.face,
+    )
+
+    app.editor_state.media = &app.image_media
+    scroll_delta := events.scroll_delta
+    clay.UpdateScrollContainers(
+        false,
+        {scroll_delta.x * SCROLL_SPEED, scroll_delta.y * SCROLL_SPEED},
+        delta_seconds,
+    )
+
+    render_app_layout(
+        app.window,
+        app.renderer,
+        &app.clay_renderer,
+        &app.ui_assets,
+        &app.app_state,
+        app.editor_state,
+        frame,
+        scroll_delta,
+        events.left_pressed,
+        delta_seconds,
+        {
+            open = &app.settings_open,
+            sync_pending = &app.menu_sync_pending,
+            animation_progress = &app.settings_menu_progress,
+        },
+    )
+
+    assert(sdl.RenderPresent(app.renderer))
+    if !app.vsync_enabled {sdl.Delay(NO_VSYNC_FRAME_DELAY_MS)}
+}
+
+app_destroy :: proc(app: ^App) {
+    if app.stage >= .Sync_Worker {
+        sync_worker_stop(&app.sync_worker, app.github_sync_thread)
+    }
+    if app.stage >= .Text_Input {stop_text_input(app.window)}
+    if app.stage >= .Ticker {
+        save_ticker_stop(&app.ticker, app.ticker_thread)
+        app_save_focused_note(app)
+        sdl.DestroyMutex(app.ticker.mutex)
+    }
+    if app.stage >= .Editor {
+        delete(app.last_saved)
+        ui.editor_destroy_state(&app.empty_editor)
+        ui.editor_close_documents(&app.documents)
+    }
+    if app.stage >= .App_State {
+        markdown.free_notebooks(app.app_state.notebooks)
+    }
+    if app.stage >= .Notes_Dir {delete(app.notes_dir)}
+    if app.stage >= .Clay_Renderer {
+        clay_ui.destroy_clay_renderer(&app.clay_renderer)
+    }
+    if app.stage >= .Assets {assets.destroy(&app.ui_assets)}
+    if app.stage >= .Media {media.destroy(&app.image_media)}
+    if app.stage >= .Renderer {sdl.DestroyRenderer(app.renderer)}
+    if app.stage >= .Font {font.close(app.face)}
+    if app.stage >= .Clay {free(rawptr(app.clay_memory))}
+    if app.stage >= .Cursors {destroy_window_cursors(&app.cursors)}
+    if app.stage >= .Window {
+        sdl.DestroyWindow(app.window)
+        sdl.Quit()
+    }
+}
+
+init_clay_context :: proc(window: ^sdl.Window) -> [^]u8 {
+    width, height: i32
+    assert(sdl.GetWindowSize(window, &width, &height))
+    min_memory_size: c.size_t = cast(c.size_t)clay.MinMemorySize()
+    memory := make([^]u8, min_memory_size)
+    arena := clay.CreateArenaWithCapacityAndMemory(min_memory_size, memory)
+    clay.Initialize(
+        arena,
+        {f32(width), f32(height)},
+        {handler = clay_ui.errorHandler},
+    )
+    return memory
+}
+
+create_sdl_renderer :: proc(window: ^sdl.Window) -> ^sdl.Renderer {
+    renderer := sdl.CreateRenderer(window, nil)
+    if renderer == nil {
+        fmt.eprintln("Renderer creation failed:", sdl.GetError())
+        return nil
+    }
+    return renderer
+}
+
+start_text_input :: proc(window: ^sdl.Window) -> bool {
+    if !sdl.StartTextInput(window) {
+        fmt.eprintln("Could not start text input:", sdl.GetError())
+        return false
+    }
+    return true
+}
+
+stop_text_input :: proc(window: ^sdl.Window) {
+    if !sdl.StopTextInput(window) {
+        fmt.eprintln("Could not stop text input:", sdl.GetError())
+    }
+}
+
+make_empty_editor :: proc(face: Face) -> ui.EditorState {
+    return ui.EditorState{buf = buffer.make_gap_buffer(64), font = face}
+}
+
+open_initial_editor :: proc(app: ^App) -> ^ui.EditorState {
+    if note := state.current_note(&app.app_state); note != nil {
+        return ui.editor_open_note(&app.documents, note, app.face)
+    }
+    return &app.empty_editor
+}
+
+snapshot_current_note :: proc(app_state: ^App_State) -> string {
+    if note := state.current_note(app_state); note != nil {
+        return strings.clone(string(note.content))
+    }
+    return ""
+}
+
+app_save_focused_note :: proc(app: ^App) {
+    git_sync.save_focused_note(
+        app.editor_state,
+        app.loaded_doc,
+        &app.last_saved,
+    )
+}
+
+save_ticker_init :: proc() -> Save_Ticker {
+    ticker := Save_Ticker {
+        mutex   = sdl.CreateMutex(),
+        running = true,
+    }
+    assert(ticker.mutex != nil)
+    return ticker
+}
+
+save_ticker_start :: proc(ticker: ^Save_Ticker) -> ^sdl.Thread {
+    thread := sdl.CreateThread(save_tick, "note-save-ticker", ticker)
+    assert(thread != nil)
+    return thread
 }
 
 save_tick :: proc "c" (data: rawptr) -> c.int {
-	ticker := cast(^Save_Ticker)data
-	for {
-		sdl.Delay(1000)
-		sdl.LockMutex(ticker.mutex)
-		if !ticker.running {
-			sdl.UnlockMutex(ticker.mutex)
-			break
-		}
-		ticker.pending = true
-		sdl.UnlockMutex(ticker.mutex)
-	}
-	return 0
+    ticker := cast(^Save_Ticker)data
+    for {
+        sdl.Delay(SAVE_INTERVAL_MS)
+        sdl.LockMutex(ticker.mutex)
+        if !ticker.running {
+            sdl.UnlockMutex(ticker.mutex)
+            break
+        }
+        ticker.pending = true
+        sdl.UnlockMutex(ticker.mutex)
+    }
+    return 0
 }
 
-save_focused_note :: proc(ed: ^ui.EditorState, path: string, last_saved: ^string) {
-	if path == "" || ed == nil do return
-
-	left, right := buffer.get_strings(&ed.buf)
-	content := fmt.tprintf("%s%s", left, right)
-	if content == last_saved^ do return
-	if err := os.write_entire_file(path, content); err != nil {
-		fmt.eprintln("Could not save note:", path, err)
-		return
-	}
-
-	delete(last_saved^)
-	last_saved^ = strings.clone(content)
+save_ticker_take_pending :: proc(ticker: ^Save_Ticker) -> bool {
+    sdl.LockMutex(ticker.mutex)
+    defer sdl.UnlockMutex(ticker.mutex)
+    pending := ticker.pending
+    ticker.pending = false
+    return pending
 }
 
+save_ticker_stop :: proc(ticker: ^Save_Ticker, thread: ^sdl.Thread) {
+    sdl.LockMutex(ticker.mutex)
+    ticker.running = false
+    sdl.UnlockMutex(ticker.mutex)
+    sdl.WaitThread(thread, nil)
+}
 
-main :: proc() {
-	track: mem.Tracking_Allocator
-	mem.tracking_allocator_init(&track, context.allocator)
-	context.allocator = mem.tracking_allocator(&track)
-	defer mem.tracking_allocator_destroy(&track)
+auto_sync_due :: proc(now: u64, next_auto_sync: ^u64) -> bool {
+    if config.github_repo() == "" || now < next_auto_sync^ {return false}
+    next_auto_sync^ = now + AUTO_SYNC_INTERVAL_NS
+    return true
+}
 
-	_ = sdl.SetAppMetadata(config.WINDOW_TITLE, config.VERSION, config.APPLICATION_ID)
-	if !sdl.Init(sdl.INIT_VIDEO) {
-		fmt.eprintln("SDL init failed:", sdl.GetError())
-		return
-	}
-	defer sdl.Quit()
-
-	window := sdl.CreateWindow(
-		config.WINDOW_TITLE,
-		DEFAULT_WIN_W,
-		DEFAULT_WIN_H,
-		{.RESIZABLE, .HIGH_PIXEL_DENSITY, .BORDERLESS, .TRANSPARENT},
-	)
-	assert(window != nil)
-	defer sdl.DestroyWindow(window)
-	settings_open := false
-	sdl.SetWindowHitTest(window, ui.window_hit_test, &settings_open)
-
-	icon := img.Load(assets.resource_path("packaging/icons/dope-notes.png"))
-	when ODIN_OS == .Linux {
-		if icon == nil do icon = img.Load("/usr/share/icons/hicolor/512x512/apps/dope-notes.png")
-	}
-	if icon != nil {
-		_ = sdl.SetWindowIcon(window, icon)
-		sdl.DestroySurface(icon)
-	}
-
-	text_cursor := sdl.CreateSystemCursor(.TEXT)
-	resize_nwse := sdl.CreateSystemCursor(.NWSE_RESIZE)
-	resize_nesw := sdl.CreateSystemCursor(.NESW_RESIZE)
-	resize_ew := sdl.CreateSystemCursor(.EW_RESIZE)
-	resize_ns := sdl.CreateSystemCursor(.NS_RESIZE)
-	default_cursor := sdl.GetDefaultCursor()
-	active_cursor := default_cursor
-	defer {
-		if default_cursor != nil do _ = sdl.SetCursor(default_cursor)
-		if text_cursor != nil do sdl.DestroyCursor(text_cursor)
-		if resize_nwse != nil do sdl.DestroyCursor(resize_nwse)
-		if resize_nesw != nil do sdl.DestroyCursor(resize_nesw)
-		if resize_ew != nil do sdl.DestroyCursor(resize_ew)
-		if resize_ns != nil do sdl.DestroyCursor(resize_ns)
-	}
-
-	width, height: i32
-	assert(sdl.GetWindowSize(window, &width, &height))
-	minMemorySize: c.size_t = cast(c.size_t)clay.MinMemorySize()
-	memory := make([^]u8, minMemorySize)
-	clayArena := clay.CreateArenaWithCapacityAndMemory(minMemorySize, memory)
-	clay.Initialize(clayArena, {f32(width), f32(height)}, {handler = clay_ui.errorHandler})
-
-	face := font.open(assets.resource_path("font/Roboto-Regular.ttf"))
-	if face == nil {
-		fmt.eprintln("Could not load Dope Notes font")
-		return
-	}
-	defer font.close(face)
-	clay.SetMeasureTextFunction(clay_ui.measure_text, face)
-
-	renderer := sdl.CreateRenderer(window, nil)
-	if renderer == nil {
-		fmt.eprintln("Renderer creation failed:", sdl.GetError())
-		return
-	}
-	defer sdl.DestroyRenderer(renderer)
-	image_media: media.Manager
-	if !media.init(
-		&image_media,
-		renderer,
-	) {fmt.eprintln("Could not initialize image loading"); return}
-	defer media.destroy(&image_media)
-
-	ui_assets, assets_ok := assets.load(renderer)
-	if !assets_ok do return
-	defer assets.destroy(&ui_assets)
-
-	assert(sdl.SetRenderLogicalPresentation(renderer, 0, 0, .DISABLED))
-	clay_renderer := clay_ui.Clay_Renderer {
-		font = face,
-	}
-	defer clay_ui.destroy_clay_renderer(&clay_renderer)
-
-	data_home := os.get_env("XDG_DATA_HOME", context.temp_allocator)
-	when ODIN_OS == .Windows {
-		data_home = os.get_env("APPDATA", context.temp_allocator)
-	}
-	if data_home == "" {
-		home := os.get_env("HOME", context.temp_allocator)
-		when ODIN_OS == .Windows {
-			home = os.get_env("USERPROFILE", context.temp_allocator)
-		}
-		if home == "" {
-			fmt.eprintln("Cannot find user notes storage")
-			return
-		}
-		when ODIN_OS == .Windows {
-			data_home = fmt.tprintf("%s/AppData/Roaming", home)
-		} else {
-			data_home = fmt.tprintf("%s/.local/share", home)
-		}
-	}
-	// Sync uses this path after the frame's temporary allocator is cleared.
-	notes_dir := strings.clone(config.notebooks_path(data_home))
-	defer delete(notes_dir)
-	first_run := !os.exists(notes_dir)
-	default_notebook := fmt.tprintf("%s/Default", notes_dir)
-	if first_run {
-		if err := os.make_directory_all(default_notebook); err != nil {
-			fmt.eprintln("Could not create notes directory:", err)
-			return
-		}
-		if err := os.write_entire_file(
-			fmt.tprintf("%s/Welcome.md", default_notebook),
-			"Hello there!\n",
-		); err != nil {
-			fmt.eprintln("Could not create welcome note:", err)
-			return
-		}
-	}
-	notebooks, notebook_err := markdown.get_notes(notes_dir)
-	if notebook_err != nil {
-		fmt.eprintln("Could not load notebooks:", notebook_err)
-		return
-	}
-	if err := markdown.migrate_note_folders(notebooks[:]); err != nil {
-		fmt.eprintln("Could not migrate note storage:", err)
-		markdown.free_notebooks(notebooks)
-		return
-	}
-	app_state := state.make_app_state(notebooks, "Default")
-	defer markdown.free_notebooks(app_state.notebooks)
-
-	documents: ui.EditorDocuments
-	defer ui.editor_close_documents(&documents)
-	empty_editor := ui.EditorState {
-		buf  = buffer.make_gap_buffer(64),
-		font = face,
-	}
-	defer ui.editor_destroy_state(&empty_editor)
-	editor_state := &empty_editor
-	if note := state.current_note(&app_state); note != nil {
-		editor_state = ui.editor_open_note(&documents, note, face)
-	}
-	loaded_doc := app_state.current_doc
-	last_saved := ""
-	if note := state.current_note(&app_state); note != nil do last_saved = strings.clone(string(note.content))
-	defer delete(last_saved)
-	ticker := Save_Ticker {
-		mutex   = sdl.CreateMutex(),
-		running = true,
-	}
-	assert(ticker.mutex != nil)
-	defer sdl.DestroyMutex(ticker.mutex)
-	thread := sdl.CreateThread(save_tick, "note-save-ticker", &ticker)
-	assert(thread != nil)
-	defer {
-		sdl.LockMutex(ticker.mutex)
-		ticker.running = false
-		sdl.UnlockMutex(ticker.mutex)
-		sdl.WaitThread(thread, nil)
-		save_focused_note(editor_state, loaded_doc, &last_saved)
-	}
-
-	if !sdl.StartTextInput(window) {
-		fmt.eprintln("Could not start text input:", sdl.GetError())
-		return
-	}
-	defer {
-		if !sdl.StopTextInput(window) {
-			fmt.eprintln("Could not stop text input:", sdl.GetError())
-		}
-	}
-
-
-	vsync_enabled := sdl.SetRenderVSync(renderer, 1)
-	previous_frame := sdl.GetTicksNS()
-	running := true
-	settings_menu_progress: f32 = 0
-	menu_sync_pending := false
-	next_auto_sync := sdl.GetTicksNS()
-	for running {
-		defer free_all(context.temp_allocator)
-		sync_requested := menu_sync_pending
-		menu_sync_pending = false
-		sdl.LockMutex(ticker.mutex)
-		save_due := ticker.pending
-		ticker.pending = false
-		sdl.UnlockMutex(ticker.mutex)
-		if save_due do save_focused_note(editor_state, loaded_doc, &last_saved)
-		now := sdl.GetTicksNS()
-		if config.github_repo() != "" && now >= next_auto_sync {
-			sync_requested = true
-			next_auto_sync = now + 60 * 1_000_000_000
-		}
-		delta_seconds := clamp(f32(now - previous_frame) / 1e9, 0.001, 0.1)
-		previous_frame = now
-		e: sdl.Event
-		scroll_delta: clay.Vector2
-		left_pressed := false
-		// input: ui.Input
-
-		for sdl.PollEvent(&e) {
-			if e.type == .KEY_DOWN &&
-			   e.key.key == sdl.K_G &&
-			   sdl.KMOD_CTRL & e.key.mod != {} &&
-			   sdl.KMOD_SHIFT & e.key.mod != {} {
-				sync_requested = true
-				continue
-			}
-			editor_state.media = &image_media
-			ui.editor_handle_event(editor_state, &e)
-			#partial switch e.type {
-			case .MOUSE_WHEEL:
-				direction: f32 = 1
-				if e.wheel.direction == .FLIPPED do direction = -1
-				scroll_delta.x += e.wheel.x * direction
-				scroll_delta.y += e.wheel.y * direction
-			case .QUIT:
-				running = false
-			case .MOUSE_BUTTON_DOWN:
-				if e.button.button == sdl.BUTTON_LEFT {
-					left_pressed = true
-				}
-
-			case .MOUSE_BUTTON_UP:
-				if e.button.button == sdl.BUTTON_LEFT {
-					// input.left_released = true
-				}
-			}
-		}
-		if sync_requested {
-			save_focused_note(editor_state, loaded_doc, &last_saved)
-			if config.sync_github(notes_dir) {
-				fresh_notebooks, fresh_err := markdown.get_notes(notes_dir)
-				if fresh_err == nil {
-					ui.editor_close_documents(&documents)
-					markdown.free_notebooks(app_state.notebooks)
-					app_state = state.make_app_state(fresh_notebooks, "Default")
-					editor_state = &empty_editor
-					loaded_doc = ""
-					delete(last_saved)
-					last_saved = ""
-					if note := state.current_note(&app_state); note != nil {
-						editor_state = ui.editor_open_note(&documents, note, face)
-						loaded_doc = note.path
-						last_saved = strings.clone(string(note.content))
-					}
-				}
-				fmt.println("GitHub sync complete")
-			} else {
-				fmt.eprintln("GitHub sync failed; see details above")
-			}
-		}
-		state.update_note_content(&app_state, loaded_doc, ui.editor_text(editor_state))
-		if app_state.new_note_requested {
-			app_state.new_note_requested = false
-			if err := state.create_note(&app_state); err != nil {
-				fmt.eprintln("Could not create note:", err)
-			}
-		}
-
-		width, height: i32
-		assert(sdl.GetWindowSize(window, &width, &height))
-		output_width, output_height: i32
-		assert(sdl.GetRenderOutputSize(renderer, &output_width, &output_height))
-		scale_x := f32(output_width) / f32(width)
-		scale_y := f32(output_height) / f32(height)
-		assert(sdl.SetRenderDrawColor(renderer, 0, 0, 0, 0))
-		assert(sdl.RenderClear(renderer))
-
-		mouse_x, mouse_y: f32
-		mouse_buttons := sdl.GetMouseState(&mouse_x, &mouse_y)
-		clay.SetLayoutDimensions({f32(width), f32(height)})
-		clay.SetPointerState({mouse_x, mouse_y}, .LEFT in mouse_buttons)
-		if default_cursor != nil {
-			cursor := default_cursor
-			if sdl.GetMouseFocus() == window {
-				point := sdl.Point{i32(mouse_x), i32(mouse_y)}
-				hit := ui.window_hit_test(window, &point, &settings_open)
-				#partial switch hit {
-				case .RESIZE_TOPLEFT, .RESIZE_BOTTOMRIGHT:
-					cursor = resize_nwse
-				case .RESIZE_TOPRIGHT, .RESIZE_BOTTOMLEFT:
-					cursor = resize_nesw
-				case .RESIZE_LEFT, .RESIZE_RIGHT:
-					cursor = resize_ew
-				case .RESIZE_TOP, .RESIZE_BOTTOM:
-					cursor = resize_ns
-				case:
-					if clay.PointerOver(clay.ID(ui.EDITOR_ID)) do cursor = text_cursor
-				}
-			}
-			if cursor == nil do cursor = default_cursor
-			if cursor != active_cursor && sdl.SetCursor(cursor) do active_cursor = cursor
-		}
-
-		if app_state.current_doc != loaded_doc {
-			save_focused_note(editor_state, loaded_doc, &last_saved)
-			selected_note := state.current_note(&app_state)
-			if selected_note != nil {
-				editor_state = ui.editor_open_note(&documents, selected_note, face)
-				loaded_doc = selected_note.path
-				delete(last_saved)
-				last_saved = strings.clone(string(selected_note.content))
-			} else if app_state.current_doc == "" {
-				editor_state = &empty_editor
-				loaded_doc = ""
-			} else {
-				fmt.eprintln("Note not found:", app_state.current_doc)
-				app_state.current_doc = loaded_doc
-			}
-		}
-
-		editor_state.media = &image_media
-		clay.UpdateScrollContainers(
-			false,
-			{scroll_delta.x * 7.2, scroll_delta.y * 7.2},
-			delta_seconds,
-		)
-		clay.BeginLayout()
-		ui.UILayout(
-			&ui_assets,
-			&app_state,
-			editor_state,
-			{
-				wheel_y = scroll_delta.y,
-				mouse = {mouse_x, mouse_y},
-				left_down = .LEFT in mouse_buttons,
-				left_pressed = left_pressed,
-				pointer_in_window = sdl.GetMouseFocus() == window,
-			},
-			delta_seconds,
-			window,
-			{
-				open = &settings_open,
-				sync_pending = &menu_sync_pending,
-				animation_progress = &settings_menu_progress,
-			},
-		)
-		commands := clay.EndLayout(delta_seconds)
-		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)
-
-		assert(sdl.RenderPresent(renderer))
-		if !vsync_enabled do sdl.Delay(16)
-	}
+sync_worker_stop :: proc(
+    worker: ^git_sync.GithubSyncWorker,
+    thread: ^sdl.Thread,
+) {
+    if thread != nil {sdl.WaitThread(thread, nil)}
+    sdl.DestroyMutex(worker.mutex)
 }
