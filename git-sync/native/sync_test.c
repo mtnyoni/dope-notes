@@ -12,6 +12,9 @@ int dn_sync(const char *, const char *, const char *, const char *, const char *
 static void require(int condition, const char *label, const char *error) {
     if (!condition) {fprintf(stderr, "FAIL %s: %s\n", label, error); exit(1);}
 }
+static int count_stash(size_t index, const char *message, const git_oid *id, void *payload) {
+    (void)index; (void)message; (void)id; (*(int *)payload)++; return 0;
+}
 static void write_note(const char *path, const char *text) {
     FILE *f = fopen(path, "w"); require(f != NULL, "open note", path);
     fputs(text, f); fclose(f);
@@ -40,9 +43,9 @@ int main(void) {
     char unavailable[600]; snprintf(unavailable, sizeof(unavailable), "%s/unavailable.git", directory);
     require(rename(remote, unavailable) == 0, "make remote unavailable", "");
     write_note(note, "Unpushed note\n");
-    require(sync_notes(local, remote, error) == -1, "failed push retains commit", error);
+    require(sync_notes(local, remote, error) == -1, "failed fetch restores local edits", error);
     require(rename(unavailable, remote) == 0, "restore remote", "");
-    require(sync_notes(local, remote, error) == 0, "clean worktree retries unpushed commit", error);
+    require(sync_notes(local, remote, error) == 0, "retry sync after remote recovery", error);
     unlink(note);
     require(sync_notes(local, remote, error) == 0, "deleted note push", error);
     require(sync_notes(local, remote, error) == 1, "deletion recorded", error);
@@ -52,10 +55,23 @@ int main(void) {
     snprintf(second, sizeof(second), "%s/other.md", reader); write_note(second, "Remote edit\n");
     require(sync_notes(reader, remote, error) == 0, "second client push", error);
     write_note(note, "Preserve my local edits\n");
-    require(sync_notes(local, remote, error) == -1, "divergence stops", error);
+    require(sync_notes(local, remote, error) == 0, "stash pull restore and push independent changes", error);
     FILE *f = fopen(note, "r"); char actual[100] = {0};
     require(f != NULL, "local note retained", error); fgets(actual, sizeof(actual), f); fclose(f);
     require(!strcmp(actual, "Preserve my local edits\n"), "divergence preserves local content", error);
+    char imported[600]; snprintf(imported, sizeof(imported), "%s/other.md", local);
+    require(access(imported, F_OK) == 0, "remote note pulled alongside local edit", error);
+    require(sync_notes(reader, remote, error) == 0, "clean client pulls remote-only notes", error);
+    char reader_note[600]; snprintf(reader_note, sizeof(reader_note), "%s/note.md", reader);
+    write_note(reader_note, "Remote conflicting edit\n");
+    require(sync_notes(reader, remote, error) == 0, "push remote conflicting edit", error);
+    write_note(note, "Local conflicting edit\n");
+    require(sync_notes(local, remote, error) == -1, "conflicting stash restoration stops", error);
+    git_repository *conflicted = NULL;
+    require(git_repository_open(&conflicted, local) == 0, "open conflict repository", error);
+    int stash_count = 0; git_stash_foreach(conflicted, count_stash, &stash_count);
+    require(stash_count > 0, "conflicting local edits retained in stash", error);
+    git_repository_free(conflicted);
     require(sync_notes(local, "/tmp/another-repo.git", error) == -1, "remote mismatch rejected", error);
     require(dn_sync(reader, remote, "dev", "unused", "Test", "test@example.invalid", error, sizeof(error)) == 0,
         "rename existing local branch to dev and sync", error);

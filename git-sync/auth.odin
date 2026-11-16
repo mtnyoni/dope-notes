@@ -23,7 +23,11 @@ http_json :: proc(method, url, token, body: string) -> (string, int, string) {
     status: c.int
     result := dn_http(cstr(method), cstr(url), cstr(token), cstr(body),
         raw_data(output), c.size_t(len(output)), &status, &error[0], len(error))
-    if result != 0 {return "", 0, strings.clone(string(cstring(&error[0])), context.temp_allocator)}
+    if result != 0 {
+        fmt.eprintfln("GitHub HTTP %s %s: %s", method, url, string(cstring(&error[0])))
+        return "", 0, strings.clone(string(cstring(&error[0])), context.temp_allocator)
+    }
+    if status >= 400 {fmt.eprintfln("GitHub HTTP %s %s: status %d", method, url, status)}
     return string(cstring(raw_data(output))), int(status), ""
 }
 
@@ -148,7 +152,15 @@ auth_thread :: proc "c" (data: rawptr) -> c.int {
         repo_json, repo_status, repo_error := http_json("GET", fmt.tprintf("https://api.github.com/repos/%s", repository), token, "")
         repo: GithubRepository
         if repo_error != "" {error = "Cannot reach GitHub. Check your connection."; break}
-        if repo_status != 200 || json.unmarshal(transmute([]u8)repo_json, &repo, allocator = context.temp_allocator) != nil {error = "Repository not found or access denied"; break}
+        if repo_status == 404 {
+            if strings.has_prefix(token, "ghu_") {
+                error = "This GitHub App needs to be installed on the notes repository with Contents read/write permission. Alternatively, use an OAuth App Client ID."
+            } else {
+                error = fmt.tprintf("GitHub account %s cannot access %s (404). Check the repository name and OAuth app access to this private repo.", user.login, repository)
+            }
+            break
+        }
+        if repo_status != 200 || json.unmarshal(transmute([]u8)repo_json, &repo, allocator = context.temp_allocator) != nil {error = fmt.tprintf("Cannot open repository (HTTP %d)", repo_status); break}
         if !repo.permissions.push {error = "Your account needs write access to this repository"; break}
         if !repo.private {error = "Choose a private repository to keep your notes private"; break}
         saved := config.GithubSettings{
@@ -158,6 +170,7 @@ auth_thread :: proc "c" (data: rawptr) -> c.int {
         }
         success, error = config.save_github_settings(saved)
     }
+    if !success && !pending {fmt.eprintfln("GitHub setup [%v]: %s", worker.job, error)}
     copy_text(worker.error[:], error)
     sdl.LockMutex(worker.mutex)
     worker.success = success

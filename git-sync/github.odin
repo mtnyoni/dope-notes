@@ -1,17 +1,27 @@
 package git_sync
 
 import config "../appconfig"
-import state "../state"
-import ui "../ui"
+import buffer "../buffer"
 import font "../font"
 import markdown "../markdown"
-import buffer "../buffer"
+import state "../state"
+import ui "../ui"
 import "base:runtime"
 import "core:c"
 import "core:fmt"
 import "core:os"
 import "core:strings"
 import sdl "vendor:sdl3"
+
+
+SyncPreflight :: enum {
+    Ready,
+    AlreadySynced,
+    Offline,
+    Failed,
+    NeedsSetup,
+}
+
 
 save_focused_note :: proc(
     ed: ^ui.EditorState,
@@ -43,7 +53,6 @@ reload_synced_notes :: proc(
     last_saved: ^string,
     face: ^font.Font,
 ) {
-    save_focused_note(editor_state^, loaded_doc^, last_saved)
     fresh_notebooks, fresh_err := markdown.get_notes(notes_dir)
     if fresh_err != nil {
         fmt.eprintln(
@@ -72,9 +81,9 @@ GithubSyncWorker :: struct {
     notes_dir: string,
     done:      bool,
     success:   bool,
-    manual: bool,
-    result: SyncPreflight,
-    error: [1024]u8,
+    manual:    bool,
+    result:    SyncPreflight,
+    error:     [1024]u8,
 }
 
 sync_github_worker :: proc "c" (data: rawptr) -> c.int {
@@ -83,25 +92,46 @@ sync_github_worker :: proc "c" (data: rawptr) -> c.int {
     result := SyncPreflight.Failed
     success := false
     settings, configured := config.load_github_settings()
-    if !configured {result = .NeedsSetup}
-    else {
+    if !configured {result = .NeedsSetup; copy_text(worker.error[:], "Repository settings are missing or invalid")} else {
         token, error := load_token()
-        if token == "" {result = .NeedsSetup; copy_text(worker.error[:], error)}
-        else {
-            code := dn_sync(cstr(worker.notes_dir),
-                cstr(fmt.tprintf("https://github.com/%s.git", settings.repository)),
-                cstr(settings.branch), cstr(token), cstr(settings.author_name),
-                cstr(settings.author_email), &worker.error[0], len(worker.error))
-            if code == 0 {success = true; result = .Ready}
-            else if code == 1 {result = .AlreadySynced; fmt.println("Already synced")}
-            else if code == -2 {
+        if token ==
+           "" {result = .NeedsSetup; copy_text(worker.error[:], error)} else {
+            code := dn_sync(
+                cstr(worker.notes_dir),
+                cstr(
+                    fmt.tprintf(
+                        "https://github.com/%s.git",
+                        settings.repository,
+                    ),
+                ),
+                cstr(settings.branch),
+                cstr(token),
+                cstr(settings.author_name),
+                cstr(settings.author_email),
+                &worker.error[0],
+                len(worker.error),
+            )
+
+            if code ==
+               0 {success = true; result = .Ready} else if code == 1 {result = .AlreadySynced; fmt.println("Already synced")} else if code == -2 {
                 result = .Offline
-                fmt.eprintln("GitHub connectivity check failed:", string(cstring(&worker.error[0])))
-            }
-            else if code == -3 {result = .NeedsSetup; copy_text(worker.error[:], "GitHub session expired. Please sign in again.")}
-            else {fmt.eprintln("GitHub sync failed:", string(cstring(&worker.error[0])))}
+            } else if code == -3 {result = .NeedsSetup}
+
         }
     }
+    if !success && result != .AlreadySynced {
+        if worker.error[0] ==
+           0 {copy_text(worker.error[:], "Unknown GitHub sync error")}
+
+        fmt.eprintfln(
+            "GitHub sync [%v] repo=%s branch=%s: %s",
+            result,
+            settings.repository,
+            settings.branch,
+            string(cstring(&worker.error[0])),
+        )
+    }
+
     free_all(context.temp_allocator)
     sdl.LockMutex(worker.mutex)
     worker.result = result
@@ -140,20 +170,33 @@ update_github_sync :: proc(
             setup.open = true
             setup.just_opened = true
             setup.phase = .Welcome
-            if worker.error[0] != 0 {copy_text(setup.error[:], string(cstring(&worker.error[0])))}
+            if worker.error[0] !=
+               0 {copy_text(setup.error[:], string(cstring(&worker.error[0])))}
         }
+
         if was_manual && result != .NeedsSetup {
-            if success || result == .AlreadySynced {ui.show_toast(toast, "Synced")}
-            else if result == .Offline {ui.show_toast(toast, string(cstring(&worker.error[0])), .CircleExclamation)}
-            else {ui.show_toast(toast, string(cstring(&worker.error[0])), .CircleExclamation)}
+            if success ||
+               result ==
+                   .AlreadySynced {ui.show_toast(toast, "Synced")} else if result == .Offline {ui.show_toast(toast, string(cstring(&worker.error[0])), .CircleExclamation)} else {ui.show_toast(toast, string(cstring(&worker.error[0])), .CircleExclamation)}
         }
+
         if success {
             reload_synced_notes(
-                worker.notes_dir, app_state, documents, editor_state,
-                empty_editor, loaded_doc, last_saved, face,
+                worker.notes_dir,
+                app_state,
+                documents,
+                editor_state,
+                empty_editor,
+                loaded_doc,
+                last_saved,
+                face,
             )
+
         } else if result != .AlreadySynced && result != .Offline {
-            fmt.eprintln("GitHub sync failed; see details above")
+            fmt.eprintln(
+                "GitHub sync failed:",
+                string(cstring(&worker.error[0])),
+            )
         }
     }
 
@@ -165,13 +208,12 @@ update_github_sync :: proc(
         worker.done = false
         sdl.UnlockMutex(worker.mutex)
         sync_thread^ = sdl.CreateThread(
-            sync_github_worker, "github-sync", worker,
+            sync_github_worker,
+            "github-sync",
+            worker,
         )
         if sync_thread^ == nil {
             fmt.eprintln("Could not start GitHub sync:", sdl.GetError())
         }
     }
 }
-
-
-SyncPreflight :: enum {Ready, AlreadySynced, Offline, Failed, NeedsSetup}

@@ -272,6 +272,7 @@ SettingsDropdownMenuState :: struct {
 	about: ^AboutDialogState,
 	github_setup: ^GithubSetupState,
 	toast: ^ToastState,
+	sync_busy: bool,
 }
 
 SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMenuState) {

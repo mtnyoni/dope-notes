@@ -80,6 +80,18 @@ UILayout :: proc(
 				}
 			}
 		}
+        if settings_state.sync_busy {
+            if clay.UI(clay.ID("SyncInputGuard"))({
+                layout = clay.LayoutConfig {
+                    sizing = clay.Sizing {width = clay.SizingGrow(), height = clay.SizingGrow()},
+                    childAlignment = clay.ChildAlignment {x = .Center, y = .Bottom},
+                    padding = clay.PaddingAll(20),
+                },
+                floating = clay.FloatingElementConfig {attachTo = .Root, zIndex = 80},
+            }) {
+                clay.Text("Syncing notes...", clay.TextElementConfig {fontSize = 12, textColor = theme.Light.text_secondary})
+            }
+        }
         GithubSetupDialog(settings_state.github_setup, maximized)
         Toast(settings_state.toast, delta_seconds, ui_assets)
         if settings_state.about != nil {

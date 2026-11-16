@@ -180,20 +180,78 @@ static int push_status(const char *ref, const char *status, void *payload) {
     if (status) {message(c->error, c->cap, status); return -1;}
     return 0;
 }
-/* Result: 0 synced, 1 no local changes, -1 failure. */
+static int commit_notes(git_repository *repo, const char *name, const char *email,
+    char *error, size_t cap) {
+    git_index *index = NULL; git_tree *tree = NULL;
+    git_commit *parent = NULL; git_signature *sig = NULL;
+    git_oid tree_id, parent_id, commit_id; int result = -1;
+#define COMMIT_CHECK(expr, step) do {if ((expr) < 0) {git_failure(error, cap, step); goto done;}} while (0)
+    COMMIT_CHECK(git_repository_index(&index, repo), "Open note index");
+    if (git_index_has_conflicts(index)) {
+        message(error, cap, "Notes have unresolved conflicts. Local changes are preserved."); goto done;
+    }
+    COMMIT_CHECK(git_index_add_all(index, NULL, 0, NULL, NULL), "Stage notes");
+    COMMIT_CHECK(git_index_update_all(index, NULL, NULL, NULL), "Stage deleted notes");
+    COMMIT_CHECK(git_index_write(index), "Save note index");
+    COMMIT_CHECK(git_index_write_tree(&tree_id, index), "Write note tree");
+    COMMIT_CHECK(git_tree_lookup(&tree, repo, &tree_id), "Read note tree");
+    int head_result = git_reference_name_to_id(&parent_id, repo, "HEAD");
+    if (head_result == 0) {
+        COMMIT_CHECK(git_commit_lookup(&parent, repo, &parent_id), "Read parent commit");
+        if (git_oid_equal(git_commit_tree_id(parent), &tree_id)) {result = 0; goto done;}
+    } else if (head_result != GIT_ENOTFOUND && head_result != GIT_EUNBORNBRANCH) {
+        git_failure(error, cap, "Read parent commit"); goto done;
+    }
+    COMMIT_CHECK(git_signature_now(&sig, name, email), "Create commit signature");
+    const git_commit *parents[] = {parent};
+    COMMIT_CHECK(git_commit_create(&commit_id, repo, "HEAD", sig, sig, NULL,
+        "Sync notes", tree, parent ? 1 : 0, parent ? parents : NULL), "Commit notes");
+    result = 1;
+done:
+    git_signature_free(sig); git_commit_free(parent); git_tree_free(tree); git_index_free(index);
+    return result;
+#undef COMMIT_CHECK
+}
+
+static int restore_notes_stash(git_repository *repo, char *error, size_t cap) {
+    git_stash_apply_options apply;
+    git_stash_apply_options_init(&apply, GIT_STASH_APPLY_OPTIONS_VERSION);
+    if (git_stash_apply(repo, 0, &apply) < 0) {
+        git_failure(error, cap, "Restore local notes (stash retained)"); return -1;
+    }
+    git_index *index = NULL;
+    if (git_repository_index(&index, repo) < 0) {
+        git_failure(error, cap, "Check restored notes (stash retained)"); return -1;
+    }
+    int conflicts = git_index_has_conflicts(index);
+    git_index_free(index);
+    if (conflicts) {
+        message(error, cap, "Pulled notes conflict with local edits. Your original edits are retained in the Git stash.");
+        return -1;
+    }
+    if (git_stash_drop(repo, 0) < 0) {
+        git_failure(error, cap, "Remove restored stash"); return -1;
+    }
+    return 0;
+}
+
+/* Result: 0 synced, 1 already up to date, -1 error, -2 offline, -3 auth. */
 int dn_sync(const char *path, const char *url, const char *branch, const char *token,
     const char *name, const char *email, char *error, size_t cap) {
     git_repository *repo = NULL; git_remote *remote = NULL;
-    git_status_list *status = NULL; git_index *index = NULL;
-    git_tree *tree = NULL; git_commit *parent = NULL; git_signature *sig = NULL;
+    git_status_list *status = NULL; git_signature *sig = NULL;
     git_reference *head = NULL, *remote_ref = NULL, *updated = NULL;
-    git_object *object = NULL; int result = -1, r;
+    git_commit *ours = NULL, *theirs = NULL;
+    git_index *merge_index = NULL; git_tree *merge_tree = NULL;
+    git_object *object = NULL;
+    int result = -1, r, stashed = 0, updated_files = 0;
     char local_name[256], tracking[256], spec[600];
     struct credentials auth = {token, 0, error, cap};
+    error[0] = 0;
     snprintf(local_name, sizeof(local_name), "refs/heads/%s", branch);
     snprintf(tracking, sizeof(tracking), "refs/remotes/origin/%s", branch);
     if (!git_reference_is_valid_name(local_name)) {message(error, cap, "Invalid branch name"); return -1;}
-#define CHECK(expr, step) do {if ((r = (expr)) < 0) {git_failure(error, cap, step); if (r == GIT_EAUTH) result = -3; goto cleanup;}} while(0)
+#define CHECK(expr, step) do {if ((r = (expr)) < 0) {if (strcmp(step, "Push notes") || !error[0]) git_failure(error, cap, step); if (r == GIT_EAUTH) result = -3; goto cleanup;}} while(0)
     r = git_repository_open_ext(&repo, path, GIT_REPOSITORY_OPEN_NO_SEARCH, NULL);
     if (r == GIT_ENOTFOUND) {
         CHECK(git_repository_init(&repo, path, 0), "Initialize notes repository");
@@ -205,83 +263,96 @@ int dn_sync(const char *path, const char *url, const char *branch, const char *t
     if (!git_remote_url(remote) || strcmp(git_remote_url(remote), url)) {
         message(error, cap, "This notes folder is linked to a different repository"); goto cleanup;
     }
+    if (git_repository_state(repo) != GIT_REPOSITORY_STATE_NONE) {
+        message(error, cap, "Finish the pending Git operation before syncing"); goto cleanup;
+    }
+    git_index *check_index = NULL;
+    CHECK(git_repository_index(&check_index, repo), "Check note index");
+    int conflicts = git_index_has_conflicts(check_index);
+    git_index_free(check_index);
+    if (conflicts) {message(error, cap, "Resolve note conflicts before syncing. Stashed notes are preserved."); goto cleanup;}
     r = git_repository_head(&head, repo);
     if (r == 0 && strcmp(git_reference_name(head), local_name)) {
         git_reference *existing = NULL;
         int lookup = git_reference_lookup(&existing, repo, local_name);
         git_reference_free(existing);
         if (lookup != GIT_ENOTFOUND) {
-            message(error, cap, "The target local branch already exists. Switch branches manually to preserve both histories.");
-            goto cleanup;
+            message(error, cap, "The target local branch already exists. Switch branches manually to preserve both histories."); goto cleanup;
         }
-        /* Rename without checking out files: preserve all edits and commits. */
         git_reference *renamed = NULL;
         CHECK(git_branch_move(&renamed, head, branch, 0), "Select notes branch");
-        git_reference_free(head); head = renamed;
-        r = 0;
+        git_reference_free(head); head = renamed; r = 0;
     }
     if (r < 0 && r != GIT_EUNBORNBRANCH && r != GIT_ENOTFOUND) {git_failure(error, cap, "Read local branch"); goto cleanup;}
     if (!head) CHECK(git_repository_set_head(repo, local_name), "Set initial notes branch");
-    if (git_repository_state(repo) != GIT_REPOSITORY_STATE_NONE) {
-        message(error, cap, "Finish the pending Git operation before syncing"); goto cleanup;
+    char probe[4096]; int http_status = 0;
+    if (!strncmp(url, "https://", 8) && dn_http("HEAD", "https://api.github.com/", "", "", probe, sizeof(probe), &http_status, error, cap) != 0) {
+        result = -2; goto cleanup;
     }
     git_status_options so; git_status_options_init(&so, GIT_STATUS_OPTIONS_VERSION);
     so.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS;
     CHECK(git_status_list_new(&status, repo, &so), "Check local changes");
     int changed = git_status_list_entrycount(status) > 0;
-    r = git_reference_lookup(&remote_ref, repo, tracking);
-    if (!changed && head && r == 0 && git_oid_equal(git_reference_target(head), git_reference_target(remote_ref))) {
-        result = 1; goto cleanup;
-    }
-    char probe[4096]; int http_status = 0;
-    if (!strncmp(url, "https://", 8) && dn_http("HEAD", "https://api.github.com/", "", "", probe, sizeof(probe), &http_status, error, cap) != 0) {
-        result = -2; goto cleanup;
-    }
-    if (changed) {
-        CHECK(git_repository_index(&index, repo), "Open note index");
-        CHECK(git_index_add_all(index, NULL, 0, NULL, NULL), "Stage notes");
-        CHECK(git_index_update_all(index, NULL, NULL, NULL), "Stage deleted notes");
-        CHECK(git_index_write(index), "Save note index");
-        git_oid tree_id, id;
-        CHECK(git_index_write_tree(&tree_id, index), "Write note tree");
-        CHECK(git_tree_lookup(&tree, repo, &tree_id), "Read note tree");
-        if (head) CHECK(git_commit_lookup(&parent, repo, git_reference_target(head)), "Read parent commit");
-        if (!parent || !git_oid_equal(git_commit_tree_id(parent), &tree_id)) {
-            CHECK(git_signature_now(&sig, name, email), "Create commit signature");
-            const git_commit *parents[] = {parent};
-            CHECK(git_commit_create(&id, repo, "HEAD", sig, sig, NULL, "Sync notes", tree, parent ? 1 : 0, parent ? parents : NULL), "Commit notes");
-        }
-        git_reference_free(head); head = NULL;
-        CHECK(git_repository_head(&head, repo), "Read committed notes");
+    if (changed && head) {
+        CHECK(git_signature_now(&sig, name, email), "Create stash signature");
+        git_oid stash_id;
+        CHECK(git_stash_save(&stash_id, repo, sig, "Dope Notes: before sync", GIT_STASH_INCLUDE_UNTRACKED), "Stash local notes");
+        stashed = 1;
+    } else if (changed) {
+        /* An unborn branch cannot be stashed. Record its files before fetching. */
+        if (commit_notes(repo, name, email, error, cap) < 0) goto cleanup;
+        CHECK(git_repository_head(&head, repo), "Read initial notes commit");
     }
     git_fetch_options fo; git_fetch_options_init(&fo, GIT_FETCH_OPTIONS_VERSION);
     fo.callbacks.credentials = credentials; fo.callbacks.payload = &auth;
-    auth.attempts = 0;
     CHECK(git_remote_fetch(remote, NULL, &fo, NULL), "Fetch notes");
-    git_reference_free(remote_ref); remote_ref = NULL;
     r = git_reference_lookup(&remote_ref, repo, tracking);
-    if (r == 0) {
-        const git_oid *their = git_reference_target(remote_ref);
-        if (!head || !git_oid_equal(git_reference_target(head), their)) {
-            int remote_ahead = head ? git_graph_descendant_of(repo, their, git_reference_target(head)) : 1;
-            int local_ahead = head ? git_graph_descendant_of(repo, git_reference_target(head), their) : 0;
-            if (remote_ahead < 0 || local_ahead < 0) {git_failure(error, cap, "Compare notes history"); goto cleanup;}
-            if (!remote_ahead && !local_ahead) {message(error, cap, "Local and remote notes have diverged. No files were overwritten."); goto cleanup;}
-            if (remote_ahead) {
-                CHECK(git_object_lookup(&object, repo, their, GIT_OBJECT_COMMIT), "Read remote notes");
-                git_checkout_options co; git_checkout_options_init(&co, GIT_CHECKOUT_OPTIONS_VERSION);
-                co.checkout_strategy = GIT_CHECKOUT_SAFE | GIT_CHECKOUT_RECREATE_MISSING;
-                CHECK(git_checkout_tree(repo, object, &co), "Update note files");
-                CHECK(git_reference_create(&updated, repo, local_name, their, 1, "Sync notes fast-forward"), "Update notes branch");
-                CHECK(git_repository_set_head(repo, local_name), "Select notes branch");
+    if (r == 0 && (!head || !git_oid_equal(git_reference_target(head), git_reference_target(remote_ref)))) {
+        const git_oid *their_id = git_reference_target(remote_ref);
+        int remote_ahead = head ? git_graph_descendant_of(repo, their_id, git_reference_target(head)) : 1;
+        int local_ahead = head ? git_graph_descendant_of(repo, git_reference_target(head), their_id) : 0;
+        if (remote_ahead < 0 || local_ahead < 0) {git_failure(error, cap, "Compare notes history"); goto cleanup;}
+        git_oid next_id = *their_id;
+        if (!remote_ahead && !local_ahead) {
+            CHECK(git_commit_lookup(&ours, repo, git_reference_target(head)), "Read local history");
+            CHECK(git_commit_lookup(&theirs, repo, their_id), "Read remote history");
+            CHECK(git_merge_commits(&merge_index, repo, ours, theirs, NULL), "Merge note histories");
+            if (git_index_has_conflicts(merge_index)) {
+                message(error, cap, "Local and remote notes conflict. No remote files were overwritten; local notes are preserved."); goto cleanup;
             }
+            git_oid tree_id;
+            CHECK(git_index_write_tree_to(&tree_id, merge_index, repo), "Write merged notes");
+            CHECK(git_tree_lookup(&merge_tree, repo, &tree_id), "Read merged notes");
+            if (!sig) CHECK(git_signature_now(&sig, name, email), "Create merge signature");
+            const git_commit *parents[] = {ours, theirs};
+            CHECK(git_commit_create(&next_id, repo, NULL, sig, sig, NULL, "Merge remote notes", merge_tree, 2, parents), "Record merged history");
+            remote_ahead = 1;
         }
-    } else if (r != GIT_ENOTFOUND) {git_failure(error, cap, "Read remote notes branch"); goto cleanup;}
+        if (remote_ahead) {
+            CHECK(git_object_lookup(&object, repo, &next_id, GIT_OBJECT_COMMIT), "Read remote notes");
+            git_checkout_options co; git_checkout_options_init(&co, GIT_CHECKOUT_OPTIONS_VERSION);
+            co.checkout_strategy = GIT_CHECKOUT_SAFE | GIT_CHECKOUT_RECREATE_MISSING;
+            CHECK(git_checkout_tree(repo, object, &co), "Pull note files");
+            CHECK(git_reference_create(&updated, repo, local_name, &next_id, 1, "Pull notes"), "Update notes branch");
+            CHECK(git_repository_set_head(repo, local_name), "Select notes branch");
+            updated_files = 1;
+        }
+    } else if (r < 0 && r != GIT_ENOTFOUND) {git_failure(error, cap, "Read remote notes branch"); goto cleanup;}
+    if (stashed) {
+        r = restore_notes_stash(repo, error, cap);
+        stashed = 0; /* On conflict keep the stash and do not apply twice. */
+        if (r < 0) goto cleanup;
+    }
+    int committed = commit_notes(repo, name, email, error, cap);
+    if (committed < 0) goto cleanup;
     git_reference *current = NULL;
     r = git_repository_head(&current, repo);
     if (r == GIT_EUNBORNBRANCH || r == GIT_ENOTFOUND) {result = 1; goto cleanup;}
     if (r < 0) {git_failure(error, cap, "Read notes branch"); goto cleanup;}
     git_oid pushed = *git_reference_target(current); git_reference_free(current);
+    if (remote_ref && git_oid_equal(&pushed, git_reference_target(remote_ref))) {
+        result = updated_files ? 0 : 1; goto cleanup;
+    }
     snprintf(spec, sizeof(spec), "%s:%s", local_name, local_name);
     char *specs[] = {spec}; git_strarray refspecs = {specs, 1};
     git_push_options po; git_push_options_init(&po, GIT_PUSH_OPTIONS_VERSION);
@@ -292,9 +363,17 @@ int dn_sync(const char *path, const char *url, const char *branch, const char *t
     CHECK(git_reference_create(&updated, repo, tracking, &pushed, 1, "Notes pushed"), "Record sync state");
     result = 0;
 cleanup:
+    if (stashed) {
+        char restore_error[1024];
+        if (restore_notes_stash(repo, restore_error, sizeof(restore_error)) < 0) {
+            size_t used = strlen(error);
+            if (used < cap) snprintf(error + used, cap - used, "; local edits are retained in the Git stash");
+        }
+    }
+    git_index_free(merge_index); git_tree_free(merge_tree);
+    git_commit_free(ours); git_commit_free(theirs);
     git_object_free(object); git_reference_free(updated); git_reference_free(remote_ref);
-    git_reference_free(head); git_signature_free(sig); git_commit_free(parent);
-    git_tree_free(tree); git_index_free(index); git_status_list_free(status);
+    git_reference_free(head); git_signature_free(sig); git_status_list_free(status);
     git_remote_free(remote); git_repository_free(repo);
     return result;
 #undef CHECK

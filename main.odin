@@ -235,7 +235,7 @@ app_frame :: proc(app: ^App) {
     manual_sync := app.menu_sync_pending
     delta_seconds, sync_requested := app_begin_frame(app)
 
-    events := poll_frame_events(app.editor_state, &app.image_media, app.github_setup.open || app.about_dialog.open || app.about_dialog.animation_progress > 0, &app.github_setup)
+    events := poll_frame_events(app.editor_state, &app.image_media, app.github_sync_thread != nil || app.github_setup.open || app.about_dialog.open || app.about_dialog.animation_progress > 0, &app.github_setup)
     if events.quit {app.running = false}
     if events.dismiss_dialog {app.about_dialog.open = false; app.github_setup.open = false}
 
@@ -254,7 +254,7 @@ app_begin_frame :: proc(
     sync_requested = app.menu_sync_pending
     app.menu_sync_pending = false
 
-    if save_ticker_take_pending(&app.ticker) {app_save_focused_note(app)}
+    if save_ticker_take_pending(&app.ticker) && app.github_sync_thread == nil {app_save_focused_note(app)}
 
     now := sdl.GetTicksNS()
     if auto_sync_due(now, &app.next_auto_sync) {sync_requested = true}
@@ -309,6 +309,7 @@ app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
         &app.titlebar_clickable,
     )
 
+    if app.github_sync_thread == nil {
     update_selected_note(
         &app.app_state,
         &app.documents,
@@ -319,6 +320,7 @@ app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
         app.face,
     )
 
+    }
     app.editor_state.media = &app.image_media
     scroll_delta := events.scroll_delta
     clay.UpdateScrollContainers(
@@ -345,6 +347,7 @@ app_draw :: proc(app: ^App, events: Frame_Events, delta_seconds: f32) {
             about = &app.about_dialog,
             github_setup = &app.github_setup,
             toast = &app.toast,
+            sync_busy = app.github_sync_thread != nil,
         },
     )
 

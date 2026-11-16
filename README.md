@@ -397,16 +397,22 @@ A Linux desktop must have a working Secret Service provider, such as GNOME
 Keyring. If it is unavailable or locked, sign-in reports that error instead of
 saving the token in plain text.
 
-Sync runs on a worker thread, at launch and every minute when configured.
-Manual sync always reports its result in a toast. When there are no local file
-changes or unpushed commits, it reports **Synced** without contacting GitHub.
-Consequently a clean laptop does not poll for remote-only changes. Fetching and
-pushing happen when there is local work to sync. Network failure skips the
-network sync and preserves local notes. Diverged histories stop with an error;
-no automatic merge or forced overwrite is performed. Start with an empty repo
-when uploading existing local notes. An empty local folder can fetch an existing
-notes history. Signing in through a ChatGPT GitHub connector is separate from
-signing into Dope Notes.
+Sync runs on a worker thread at launch and every minute when configured.
+Manual sync reports its result in a toast. Every sync fetches the remote branch,
+even when there are no local edits. It stashes local edits (including untracked
+notes), pulls remote changes, restores the stash, commits local changes, and
+pushes. An initial branch with no commits records its notes before fetching,
+because Git cannot stash an unborn branch. Compatible diverged histories are
+merged; conflicts stop sync and preserve the original local edits in the stash.
+The app pauses editing while sync updates files, then reloads the updated notes.
+If nothing changed locally or remotely, the toast reports **Synced**.
+
+A GitHub App Client ID also requires the app to be installed on the selected
+repository with Contents read/write permission. Device authorization alone does
+not grant repository access. A 404 for a private repository can mean missing app
+installation/permissions, an incorrect repository name, or an account without
+access. The setup error identifies GitHub App sessions separately.
+Signing into a ChatGPT connector is separate from signing into Dope Notes.
 
 ### Developer configuration
 
