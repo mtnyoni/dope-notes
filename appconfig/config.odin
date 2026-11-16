@@ -4,7 +4,9 @@ import "core:fmt"
 
 // Direct source builds are isolated by default. Release packaging opts out.
 DEVELOPMENT :: #config(DOPE_NOTES_DEV, true)
-VERSION :: #config(DOPE_NOTES_VERSION, "0.0.0")
+VERSION_FILE :: #load("../VERSION", string)
+DEFAULT_VERSION :: VERSION_FILE[:len(VERSION_FILE) - 1]
+VERSION :: #config(DOPE_NOTES_VERSION, DEFAULT_VERSION)
 when DEVELOPMENT {
 	DISPLAY_VERSION :: VERSION + " (dev)"
 	WINDOW_TITLE :: "Dope Notes (Development)"

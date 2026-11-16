@@ -13,12 +13,13 @@ if [[ "${1:-}" == "--source-only" ]]; then
 	shift
 fi
 
-if (( $# != 1 )); then
+if (( $# > 1 )); then
 	echo "usage: $0 [--source-only] [v]MAJOR.MINOR.PATCH[rcN][-RELEASE]" >&2
 	exit 2
 fi
 
-package_version="${1#v}"
+package_version="${1:-$(cat "$project_dir/VERSION")}"
+package_version="${package_version#v}"
 
 if [[ ! "$package_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(rc([1-9][0-9]*)?)?(-([1-9][0-9]*))?$ ]]; then
 	echo "error: invalid version; examples: v0.0.1rc, v0.0.1-1, 0.0.1" >&2

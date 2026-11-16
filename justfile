@@ -4,7 +4,7 @@ run: setup-shared font-build
 build: setup-shared font-build
     odin build . -collection:shared=./odin_shared -define:DOPE_NOTES_DEV=true
 
-package version:
+package version="":
     bash package-rpm.sh {{version}}
 
 font-build:

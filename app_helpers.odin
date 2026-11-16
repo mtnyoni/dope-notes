@@ -213,7 +213,7 @@ render_app_layout :: proc(
 create_app_window :: proc(settings_open: ^bool) -> ^sdl.Window {
     _ = sdl.SetAppMetadata(
         config.WINDOW_TITLE,
-        config.VERSION,
+        strings.clone_to_cstring(config.VERSION, context.temp_allocator),
         config.APPLICATION_ID,
     )
     if !sdl.Init(sdl.INIT_VIDEO) {
