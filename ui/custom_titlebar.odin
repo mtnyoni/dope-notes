@@ -11,9 +11,13 @@ import sdl "vendor:sdl3"
 TITLEBAR_HEIGHT :: 32
 TITLEBAR_BUTTON_WIDTH :: 28
 TITLEBAR_BUTTON_GAP :: 1
-TITLEBAR_ABOUT_WIDTH :: 28
+TITLEBAR_HORIZONTAL_PADDING :: 8
+WINDOW_OUTER_PADDING :: 4
+TITLEBAR_BUTTON_COUNT :: 4
+// hit test uses the controls width to keep the buttons clickable.
 TITLEBAR_CONTROLS_WIDTH ::
-	TITLEBAR_ABOUT_WIDTH + 3 * TITLEBAR_BUTTON_WIDTH + 3 * TITLEBAR_BUTTON_GAP
+	TITLEBAR_BUTTON_COUNT * TITLEBAR_BUTTON_WIDTH +
+	(TITLEBAR_BUTTON_COUNT - 1) * TITLEBAR_BUTTON_GAP
 TITLEBAR_RESIZE_EDGE :: 6
 TITLEBAR_RESIZE_CORNER :: 12
 
@@ -22,14 +26,14 @@ window_hit_test :: proc "c" (
 	pos: ^sdl.Point,
 	data: rawptr,
 ) -> sdl.HitTestResult {
-	return titlebar_hit_test(window, pos)
-}
-
-titlebar_hit_test :: proc "c" (window: ^sdl.Window, pos: ^sdl.Point) -> sdl.HitTestResult {
 	width, height: i32
 	if !sdl.GetWindowSize(window, &width, &height) do return .NORMAL
 	controls_left :=
-		width - TITLEBAR_CONTROLS_WIDTH - 8 - (.MAXIMIZED in sdl.GetWindowFlags(window) ? 0 : 4)
+		width -
+		TITLEBAR_CONTROLS_WIDTH -
+		TITLEBAR_HORIZONTAL_PADDING -
+		(.MAXIMIZED in sdl.GetWindowFlags(window) ? 0 : WINDOW_OUTER_PADDING)
+
 	if .MAXIMIZED in sdl.GetWindowFlags(window) {
 		if pos.y < TITLEBAR_HEIGHT && pos.x < controls_left do return .DRAGGABLE
 		return .NORMAL
@@ -61,141 +65,184 @@ titlebar_hit_test :: proc "c" (window: ^sdl.Window, pos: ^sdl.Point) -> sdl.HitT
 TitleBar :: proc(
 	window: ^sdl.Window,
 	ui_assets: ^assets.Manager,
-	settings_open: ^bool,
-	menu_sync_pending: ^bool,
+	delta_seconds: f32,
+	settings_state: SettingsDropdownMenuState,
 ) {
 	if clay.UI(clay.ID("TitleBar"))(
 	{
-		layout = {
-			sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(TITLEBAR_HEIGHT)},
+		layout = clay.LayoutConfig {
+			sizing = clay.Sizing {
+				width = clay.SizingGrow(),
+				height = clay.SizingFixed(TITLEBAR_HEIGHT),
+			},
 			layoutDirection = .LeftToRight,
-			childAlignment = {y = .Center},
-			padding = clay.Padding{left = 8, right = 8, top = 0, bottom = 0},
+			childAlignment = clay.ChildAlignment{y = .Center},
+			padding = clay.Padding {
+				left = TITLEBAR_HORIZONTAL_PADDING,
+				right = TITLEBAR_HORIZONTAL_PADDING,
+			},
 		},
 	},
 	) {
 		if ui_assets != nil && ui_assets.app_icon != nil {
 			if clay.UI(clay.ID("TitleBarIcon"))(
 			{
-				layout = {sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)}},
-				image = {imageData = rawptr(ui_assets.app_icon)},
+				layout = clay.LayoutConfig {
+					sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)},
+				},
+				image = clay.ImageElementConfig{imageData = rawptr(ui_assets.app_icon)},
 			},
 			) {}
 		}
+
 		if clay.UI(clay.ID("TitleBarTitle"))(
 		{
-			layout = {
-				sizing = {width = clay.SizingFit(), height = clay.SizingFit()},
-				padding = {8, 0, 0, 0},
+			layout = clay.LayoutConfig {
+				sizing = clay.Sizing{width = clay.SizingFit(), height = clay.SizingFit()},
+				padding = clay.Padding{left = 8},
 			},
 		},
 		) {
 			clay.Text(
 				"Dope notes",
-				{fontSize = 13, textColor = theme.Light.text, wrapMode = .None},
+				clay.TextElementConfig {
+					fontSize = 13,
+					textColor = theme.Light.text,
+					wrapMode = .None,
+				},
 			)
 		}
 
 		if clay.UI()(
-		{layout = {sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(1)}}},
+		{
+			layout = clay.LayoutConfig {
+				sizing = clay.Sizing{width = clay.SizingGrow(), height = clay.SizingFixed(1)},
+			},
+		},
 		) {}
 
 		if clay.UI()(
 		{
 			layout = clay.LayoutConfig {
-				sizing = {width = clay.SizingFit(), height = clay.SizingFixed(TITLEBAR_HEIGHT)},
+				sizing = clay.Sizing {
+					width = clay.SizingFit(),
+					height = clay.SizingFixed(TITLEBAR_HEIGHT),
+				},
 				layoutDirection = .LeftToRight,
-				childAlignment = {y = .Center},
+				childAlignment = clay.ChildAlignment{y = .Center},
 				childGap = TITLEBAR_BUTTON_GAP,
 			},
 		},
 		) {
-			TitleBarButton(window, ui_assets, "Settings", 3, settings_open)
-			TitleBarButton(window, ui_assets, "Minimize", 0)
-			TitleBarButton(window, ui_assets, "Maximize", 1)
-			TitleBarButton(window, ui_assets, "Close", 2)
+			TitleBarButton(window, ui_assets, "Settings", .TOGGLE_SETTINGS, settings_state.open)
+			TitleBarButton(window, ui_assets, "Minimize", .MINIMIZE)
+			TitleBarButton(window, ui_assets, "Maximize", .MAXIMIZE)
+			TitleBarButton(window, ui_assets, "Close", .CLOSE)
 		}
-		if settings_open != nil && settings_open^ {
-			SettingsDropdownMenu(window, {open = settings_open, sync_pending = menu_sync_pending})
+
+		if settings_state.animation_progress != nil {
+			settings_state.animation_progress^ = clamp(
+				settings_state.animation_progress^ +
+				(settings_state.open != nil && settings_state.open^ ? 1.0 : -1.0) *
+					delta_seconds *
+					9,
+				0,
+				1,
+			)
+		}
+
+		if settings_state.open != nil &&
+		   (settings_state.open^ ||
+				   settings_state.animation_progress != nil &&
+					   settings_state.animation_progress^ > 0) {
+
+			SettingsDropdownMenu(window, settings_state)
 		}
 	}
+}
+
+TitleButtonAction :: enum {
+	MINIMIZE        = 0,
+	MAXIMIZE        = 1,
+	CLOSE           = 2,
+	TOGGLE_SETTINGS = 3,
 }
 
 TitleBarButton :: proc(
 	window: ^sdl.Window,
 	ui_assets: ^assets.Manager,
 	name: string,
-	action: int,
+	action: TitleButtonAction,
 	settings_open: ^bool = nil,
 ) {
-
 	if clay.UI(clay.ID(name))(
 	{
-		layout = {
-			sizing = {
-				width = clay.SizingFixed(
-					action == 3 ? TITLEBAR_ABOUT_WIDTH : TITLEBAR_BUTTON_WIDTH,
-				),
+		layout = clay.LayoutConfig {
+			sizing = clay.Sizing {
+				width = clay.SizingFixed(TITLEBAR_BUTTON_WIDTH),
 				height = clay.SizingFixed(TITLEBAR_HEIGHT),
 			},
-			childAlignment = {x = .Center, y = .Center},
+			childAlignment = clay.ChildAlignment{x = .Center, y = .Center},
 		},
 	},
 	) {
-		if window != nil && clay.Hovered() && clay.GetPointerState().state == .PressedThisFrame {
-			switch action {
-			case 0:
-				_ = sdl.MinimizeWindow(window)
-			case 1:
+		icon: assets.Icon = .Square
+		hovered := clay.Hovered()
+		clicked := window != nil && hovered && clay.GetPointerState().state == .PressedThisFrame
+
+		switch action {
+		case .MINIMIZE:
+			icon = .Minus
+			if clicked do _ = sdl.MinimizeWindow(window)
+
+		case .MAXIMIZE:
+			icon =
+				window != nil && .MAXIMIZED in sdl.GetWindowFlags(window) ? .SquaresUnite : .Square
+			if clicked {
 				if .MAXIMIZED in sdl.GetWindowFlags(window) {
 					_ = sdl.RestoreWindow(window)
 				} else {
 					_ = sdl.MaximizeWindow(window)
 				}
-			case 2:
+			}
+
+		case .CLOSE:
+			icon = .X
+			if clicked {
 				event := sdl.Event {
 					type = .QUIT,
 				}
 				_ = sdl.PushEvent(&event)
-			case 3:
-				if settings_open != nil do settings_open^ = !settings_open^
 			}
-		}
-		icon: assets.Icon = .Square
 
-		switch action {
-		case 0:
-			icon = .Minus
-		case 1:
-			icon =
-				window != nil && .MAXIMIZED in sdl.GetWindowFlags(window) ? .SquaresUnite : .Square
-		case 2:
-			icon = .X
-		case 3:
+		case .TOGGLE_SETTINGS:
 			icon = .Settings
+			if clicked && settings_open != nil do settings_open^ = !settings_open^
 		}
 
-		hovered := clay.Hovered()
 		if clay.UI(clay.ID("TitleBarButtonFace", u32(action)))(
 		{
-			layout = {
-				sizing = {
-					width = clay.SizingFixed(action == 3 ? TITLEBAR_ABOUT_WIDTH : 28),
+			layout = clay.LayoutConfig {
+				sizing = clay.Sizing {
+					width = clay.SizingFixed(TITLEBAR_BUTTON_WIDTH),
 					height = clay.SizingFixed(28),
 				},
 				childAlignment = {x = .Center, y = .Center},
 			},
 			backgroundColor = hovered ? theme.Gray_200 : clay.Color{},
-			cornerRadius = clay.CornerRadiusAll(action == 3 ? 6 : 14),
+			cornerRadius = clay.CornerRadiusAll(action == .TOGGLE_SETTINGS ? 6 : 14),
 		},
 		) {
 			if texture := assets.get(ui_assets, icon); texture != nil {
 				if clay.UI()(
 				{
-					layout = {
-						sizing = {width = clay.SizingFixed(12), height = clay.SizingFixed(12)},
+					layout = clay.LayoutConfig {
+						sizing = clay.Sizing {
+							width = clay.SizingFixed(12),
+							height = clay.SizingFixed(12),
+						},
 					},
-					image = {imageData = rawptr(texture)},
+					image = clay.ImageElementConfig{imageData = rawptr(texture)},
 				},
 				) {}
 			}
@@ -204,17 +251,24 @@ TitleBarButton :: proc(
 }
 
 SettingsDropdownMenuState :: struct {
-	open:         ^bool,
-	sync_pending: ^bool,
+	open:               ^bool,
+	sync_pending:       ^bool,
+	animation_progress: ^f32,
 }
 
 SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMenuState) {
 	menu_items := [2]string{"Sync", "About"}
+	animation_progress :=
+		menu_state.animation_progress != nil ? menu_state.animation_progress^ : 1.0
+	animation_easing := animation_progress * animation_progress * (3 - 2 * animation_progress)
 
 	if clay.UI(clay.ID("SettingsMenu"))(
 	{
-		layout = {
-			sizing = {width = clay.SizingFixed(112), height = clay.SizingFit()},
+		layout = clay.LayoutConfig {
+			sizing = clay.Sizing {
+				width = clay.SizingFixed(28 + 84 * animation_easing),
+				height = clay.SizingFixed(64 * animation_easing),
+			},
 			layoutDirection = .TopToBottom,
 			padding = clay.PaddingAll(4),
 		},
@@ -224,6 +278,7 @@ SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMe
 			attachment = {element = .LeftTop, parent = .LeftBottom},
 			zIndex = 10,
 		},
+		clip = {horizontal = true, vertical = true},
 		backgroundColor = theme.White,
 		cornerRadius = clay.CornerRadiusAll(6),
 		border = clay.BorderElementConfig {
@@ -236,17 +291,24 @@ SettingsDropdownMenu :: proc(window: ^sdl.Window, menu_state: SettingsDropdownMe
 			hovered := false
 			if clay.UI(clay.ID("SettingsMenuItem", u32(index)))(
 			{
-				layout = {
-					sizing = {width = clay.SizingGrow(), height = clay.SizingFixed(28)},
-					childAlignment = {y = .Center},
+				layout = clay.LayoutConfig {
+					sizing = clay.Sizing{width = clay.SizingGrow(), height = clay.SizingFixed(28)},
+					childAlignment = clay.ChildAlignment{y = .Center},
 					padding = clay.Padding{left = 8},
 				},
-				backgroundColor = clay.Hovered() ? theme.Gray_100 : theme.White,
+				backgroundColor = hovered ? theme.Gray_100 : theme.White,
 				cornerRadius = clay.CornerRadiusAll(4),
 			},
 			) {
 				hovered = clay.Hovered()
-				clay.Text(label, {fontSize = 12, textColor = theme.Light.text, wrapMode = .None})
+				clay.Text(
+					label,
+					clay.TextElementConfig {
+						fontSize = 12,
+						textColor = theme.Light.text,
+						wrapMode = .None,
+					},
+				)
 			}
 
 			if hovered && clay.GetPointerState().state == .PressedThisFrame {

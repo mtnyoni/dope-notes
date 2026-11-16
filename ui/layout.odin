@@ -13,8 +13,7 @@ UILayout :: proc(
 	scroll_input: ScrollInput = {},
 	delta_seconds: f32 = 1.0 / 60.0,
 	window: ^sdl.Window = nil,
-	settings_open: ^bool = nil,
-	menu_sync_pending: ^bool = nil,
+	settings_state: SettingsDropdownMenuState = {},
 ) {
 	maximized := window != nil && .MAXIMIZED in sdl.GetWindowFlags(window)
 	if clay.UI(clay.ID("Root"))(
@@ -22,7 +21,7 @@ UILayout :: proc(
 		layout = {
 			sizing = {width = clay.SizingGrow(), height = clay.SizingGrow()},
 			layoutDirection = .TopToBottom,
-			padding = clay.PaddingAll(maximized ? 0 : 4),
+			padding = clay.PaddingAll(maximized ? 0 : WINDOW_OUTER_PADDING),
 		},
 		backgroundColor = theme.White,
 		cornerRadius = clay.CornerRadiusAll(maximized ? 0 : 12),
@@ -32,7 +31,7 @@ UILayout :: proc(
 		},
 	},
 	) {
-		TitleBar(window, ui_assets, settings_open, menu_sync_pending)
+		TitleBar(window, ui_assets, delta_seconds, settings_state)
 		if clay.UI(clay.ID("MainArea"))(
 		{
 			layout = {

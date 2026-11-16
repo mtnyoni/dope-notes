@@ -241,6 +241,7 @@ main :: proc() {
 	previous_frame := sdl.GetTicksNS()
 	running := true
 	settings_open := false
+	settings_menu_progress: f32 = 0
 	menu_sync_pending := false
 	next_auto_sync := sdl.GetTicksNS()
 	for running {
@@ -341,7 +342,7 @@ main :: proc() {
 			cursor := default_cursor
 			if sdl.GetMouseFocus() == window {
 				point := sdl.Point{i32(mouse_x), i32(mouse_y)}
-				hit := ui.titlebar_hit_test(window, &point)
+				hit := ui.window_hit_test(window, &point, nil)
 				#partial switch hit {
 				case .RESIZE_TOPLEFT, .RESIZE_BOTTOMRIGHT:
 					cursor = resize_nwse
@@ -396,8 +397,7 @@ main :: proc() {
 			},
 			delta_seconds,
 			window,
-			&settings_open,
-			&menu_sync_pending,
+			{open = &settings_open, sync_pending = &menu_sync_pending, animation_progress = &settings_menu_progress},
 		)
 		commands := clay.EndLayout(delta_seconds)
 		clay_ui.render_clay(&clay_renderer, renderer, &commands, scale_x, scale_y)
